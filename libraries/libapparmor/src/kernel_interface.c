@@ -28,7 +28,7 @@
 
 #include "private.h"
 
-#define DEFAULT_APPARMORFS "/sys/kernel/security/apparmor"
+#define DEFAULT_APPARMORFS "/sys/kernel/security/pyronia"
 
 struct aa_kernel_interface {
 	unsigned int ref_count;
