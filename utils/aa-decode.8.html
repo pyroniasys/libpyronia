@@ -1,0 +1,80 @@
+<?xml version="1.0" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title></title>
+<link rel="stylesheet" href="apparmor.css" type="text/css" />
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rev="made" href="mailto:root@localhost" />
+</head>
+
+<body>
+<table border="0" width="100%" cellspacing="0" cellpadding="3">
+<tr><td class="_podblock_" valign="middle">
+<big><strong><span class="_podblock_">&nbsp;</span></strong></big>
+</td></tr>
+</table>
+
+
+
+<ul id="index">
+  <li><a href="#NAME">NAME</a></li>
+  <li><a href="#SYNOPSIS">SYNOPSIS</a></li>
+  <li><a href="#DESCRIPTION">DESCRIPTION</a></li>
+  <li><a href="#OPTIONS">OPTIONS</a></li>
+  <li><a href="#EXAMPLES">EXAMPLES</a></li>
+  <li><a href="#BUGS">BUGS</a></li>
+  <li><a href="#SEE-ALSO">SEE ALSO</a></li>
+</ul>
+
+<h1 id="NAME">NAME</h1>
+
+<p>aa-decode - decode hex-encoded in AppArmor log files</p>
+
+<h1 id="SYNOPSIS">SYNOPSIS</h1>
+
+<p><b>aa-decode</b> [option] &lt;HEX STRING&gt;</p>
+
+<h1 id="DESCRIPTION">DESCRIPTION</h1>
+
+<p><b>aa-decode</b> will decode hex-encoded strings as seen in AppArmor log output. It will also take an audit log on standard input and convert any hex-encoded AppArmor log entries and display them on standard output.</p>
+
+<h1 id="OPTIONS">OPTIONS</h1>
+
+<dl>
+
+<dt id="help">--help</dt>
+<dd>
+
+<p>displays a short usage statement.</p>
+
+</dd>
+</dl>
+
+<h1 id="EXAMPLES">EXAMPLES</h1>
+
+<pre><code>  $ aa-decode 2F746D702F666F6F20626172
+  Decoded: /tmp/foo bar
+
+  $ cat /var/log/kern.log | aa-decode
+  ... denied_mask=&quot;r::&quot; fsuid=1000 ouid=1000 name=/tmp/foo bar</code></pre>
+
+<h1 id="BUGS">BUGS</h1>
+
+<p>None. Please report any you find to Launchpad at <a href="https://bugs.launchpad.net/apparmor/+filebug">https://bugs.launchpad.net/apparmor/+filebug</a>.</p>
+
+<h1 id="SEE-ALSO">SEE ALSO</h1>
+
+<p>apparmor(7)</p>
+
+<table border="0" width="100%" cellspacing="0" cellpadding="3">
+<tr><td class="_podblock_" valign="middle">
+<big><strong><span class="_podblock_">&nbsp;</span></strong></big>
+</td></tr>
+</table>
+
+</body>
+
+</html>
+
+

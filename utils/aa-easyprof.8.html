@@ -1,0 +1,332 @@
+<?xml version="1.0" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title></title>
+<link rel="stylesheet" href="apparmor.css" type="text/css" />
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rev="made" href="mailto:root@localhost" />
+</head>
+
+<body>
+<table border="0" width="100%" cellspacing="0" cellpadding="3">
+<tr><td class="_podblock_" valign="middle">
+<big><strong><span class="_podblock_">&nbsp;</span></strong></big>
+</td></tr>
+</table>
+
+
+
+<ul id="index">
+  <li><a href="#NAME">NAME</a></li>
+  <li><a href="#SYNOPSIS">SYNOPSIS</a></li>
+  <li><a href="#DESCRIPTION">DESCRIPTION</a></li>
+  <li><a href="#OPTIONS">OPTIONS</a></li>
+  <li><a href="#EXAMPLES">EXAMPLES</a></li>
+  <li><a href="#BUGS">BUGS</a></li>
+  <li><a href="#SEE-ALSO">SEE ALSO</a></li>
+</ul>
+
+<h1 id="NAME">NAME</h1>
+
+<p>aa-easyprof - AppArmor profile generation made easy.</p>
+
+<h1 id="SYNOPSIS">SYNOPSIS</h1>
+
+<p><b>aa-easyprof</b> [option] &lt;path to binary&gt;</p>
+
+<h1 id="DESCRIPTION">DESCRIPTION</h1>
+
+<p><b>aa-easyprof</b> provides an easy to use interface for AppArmor policy generation. <b>aa-easyprof</b> supports the use of templates and policy groups to quickly profile an application. Please note that while this tool can help with policy generation, its utility is dependent on the quality of the templates, policy groups and abstractions used. Also, this tool may create policy which is less restricted than creating policy by hand or with <b>aa-genprof</b> and <b>aa-logprof</b>.</p>
+
+<h1 id="OPTIONS">OPTIONS</h1>
+
+<p><b>aa-easyprof</b> accepts the following arguments:</p>
+
+<dl>
+
+<dt id="t-TEMPLATE---template-TEMPLATE">-t TEMPLATE, --template=TEMPLATE</dt>
+<dd>
+
+<p>Specify which template to use. May specify either a system template from /usr/share/apparmor/easyprof/templates or a filename for the template to use. If not specified, use /usr/share/apparmor/easyprof/templates/default.</p>
+
+</dd>
+<dt id="p-POLICYGROUPS---policy-groups-POLICYGROUPS">-p POLICYGROUPS, --policy-groups=POLICYGROUPS</dt>
+<dd>
+
+<p>Specify POLICY as a comma-separated list of policy groups. See --list-templates for supported policy groups. The available policy groups are in /usr/share/apparmor/easyprof/policy. Policy groups are simply groupings of AppArmor rules or policies. They are similar to AppArmor abstractions, but usually encompass more policy rules.</p>
+
+</dd>
+<dt id="a-ABSTRACTIONS---abstractions-ABSTRACTIONS">-a ABSTRACTIONS, --abstractions=ABSTRACTIONS</dt>
+<dd>
+
+<p>Specify ABSTRACTIONS as a comma-separated list of AppArmor abstractions. It is usually recommended you use policy groups instead, but this is provided as a convenience. AppArmor abstractions are located in /etc/apparmor.d/abstractions. See apparmor.d(5) for details.</p>
+
+</dd>
+<dt id="r-PATH---read-path-PATH">-r PATH, --read-path=PATH</dt>
+<dd>
+
+<p>Specify a PATH to allow owner reads. May be specified multiple times. If the PATH ends in a &#39;/&#39;, then PATH is treated as a directory and reads are allowed to all files under this directory. Can optionally use &#39;/*&#39; at the end of the PATH to only allow reads to files directly in PATH.</p>
+
+</dd>
+<dt id="w-PATH---write-dir-PATH">-w PATH, --write-dir=PATH</dt>
+<dd>
+
+<p>Like --read-path but also allow owner writes in additions to reads.</p>
+
+</dd>
+<dt id="n-NAME---name-NAME">-n NAME, --name=NAME</dt>
+<dd>
+
+<p>Specify NAME of policy. If not specified, NAME is set to the name of the binary. The NAME of the policy is typically only used for profile meta data and does not specify the AppArmor profile name.</p>
+
+</dd>
+<dt id="profile-name-PROFILENAME">--profile-name=PROFILENAME</dt>
+<dd>
+
+<p>Specify the AppArmor profile name. When set, uses &#39;profile PROFILENAME&#39; in the profile. When set and specifying a binary, uses &#39;profile PROFILENAME BINARY&#39; in the profile. If not set, the binary will be used as the profile name and profile attachment.</p>
+
+</dd>
+<dt id="template-var-VAR-VALUE">--template-var=&quot;@{VAR}=VALUE&quot;</dt>
+<dd>
+
+<p>Set VAR to VALUE in the resulting policy. This typically only makes sense if the specified template uses this value. May be specified multiple times.</p>
+
+</dd>
+<dt id="list-templates">--list-templates</dt>
+<dd>
+
+<p>List available templates.</p>
+
+</dd>
+<dt id="show-template">--show-template</dt>
+<dd>
+
+<p>Display template specified with --template.</p>
+
+</dd>
+<dt id="templates-dir-PATH">--templates-dir=PATH</dt>
+<dd>
+
+<p>Use PATH instead of system templates directory.</p>
+
+</dd>
+<dt id="include-templates-dir-PATH">--include-templates-dir=PATH</dt>
+<dd>
+
+<p>Include PATH when searching for templates in addition to the system templates directory (or the one specified with --templates-dir). System templates will match before those in PATH.</p>
+
+</dd>
+<dt id="list-policy-groups">--list-policy-groups</dt>
+<dd>
+
+<p>List available policy groups.</p>
+
+</dd>
+<dt id="show-policy-group">--show-policy-group</dt>
+<dd>
+
+<p>Display policy groups specified with --policy-groups.</p>
+
+</dd>
+<dt id="policy-groups-dir-PATH">--policy-groups-dir=PATH</dt>
+<dd>
+
+<p>Use PATH instead of system policy-groups directory.</p>
+
+</dd>
+<dt id="include-policy-groups-dir-PATH">--include-policy-groups-dir=PATH</dt>
+<dd>
+
+<p>Include PATH when searching for policy groups in addition to the system policy-groups directory (or the one specified with --policy-groups-dir). System policy-groups will match before those in PATH.</p>
+
+</dd>
+<dt id="policy-version-VERSION">--policy-version=VERSION</dt>
+<dd>
+
+<p>Must be used with --policy-vendor and is used to specify the version of policy groups and templates. When specified, <b>aa-easyprof</b> looks for the subdirectory VENDOR/VERSION within the policy-groups and templates directory. The specified version must be a positive decimal number compatible with the JSON Number type. Eg, when using:</p>
+
+<pre><code>    $ aa-easyprof --templates-dir=/usr/share/apparmor/easyprof/templates \
+                  --policy-groups-dir=/usr/share/apparmor/easyprof/policygroups \
+                  --policy-vendor=&quot;foo&quot; \
+                  --policy-version=1.0</code></pre>
+
+<p>Then /usr/share/apparmor/easyprof/templates/foo/1.0 will be searched for templates and /usr/share/apparmor/easyprof/policygroups/foo/1.0 for policy groups.</p>
+
+</dd>
+<dt id="policy-vendor-VENDOR">--policy-vendor=VENDOR</dt>
+<dd>
+
+<p>Must be used with --policy-version and is used to specify the vendor for policy groups and templates. See --policy-version for more information.</p>
+
+</dd>
+<dt id="author">--author</dt>
+<dd>
+
+<p>Specify author of the policy.</p>
+
+</dd>
+<dt id="copyright">--copyright</dt>
+<dd>
+
+<p>Specify copyright of the policy.</p>
+
+</dd>
+<dt id="comment">--comment</dt>
+<dd>
+
+<p>Specify comment for the policy.</p>
+
+</dd>
+<dt id="m-MANIFEST---manifest-MANIFEST">-m MANIFEST, --manifest=MANIFEST</dt>
+<dd>
+
+<p><b>aa-easyprof</b> also supports using a JSON manifest file for specifying options related to policy. Unlike command line arguments, the JSON file may specify multiple profiles. The structure of the JSON is:</p>
+
+<pre><code>  {
+    &quot;security&quot;: {
+      &quot;profiles&quot;: {
+        &quot;&lt;profile name 1&gt;&quot;: {
+          ... attributes specific to this profile ...
+        },
+        &quot;&lt;profile name 2&gt;&quot;: {
+          ...
+        }
+      }
+    }
+  }</code></pre>
+
+<p>Each profile JSON object (ie, everything under a profile name) may specify any fields related to policy. The &quot;security&quot; JSON container object is optional and may be omitted. An example manifest file demonstrating all fields is:</p>
+
+<pre><code>  {
+    &quot;security&quot;: {
+      &quot;profiles&quot;: {
+        &quot;com.example.foo&quot;: {
+          &quot;abstractions&quot;: [
+            &quot;audio&quot;,
+            &quot;gnome&quot;
+          ],
+          &quot;author&quot;: &quot;Your Name&quot;,
+          &quot;binary&quot;: &quot;/opt/foo/**&quot;,
+          &quot;comment&quot;: &quot;Unstructured single-line comment&quot;,
+          &quot;copyright&quot;: &quot;Unstructured single-line copyright statement&quot;,
+          &quot;name&quot;: &quot;My Foo App&quot;,
+          &quot;policy_groups&quot;: [
+            &quot;networking&quot;,
+            &quot;user-application&quot;
+          ],
+          &quot;policy_vendor&quot;: &quot;somevendor&quot;,
+          &quot;policy_version&quot;: 1.0,
+          &quot;read_path&quot;: [
+            &quot;/tmp/foo_r&quot;,
+            &quot;/tmp/bar_r/&quot;
+          ],
+          &quot;template&quot;: &quot;user-application&quot;,
+          &quot;template_variables&quot;: {
+            &quot;APPNAME&quot;: &quot;foo&quot;,
+            &quot;VAR1&quot;: &quot;bar&quot;,
+            &quot;VAR2&quot;: &quot;baz&quot;
+          },
+          &quot;write_path&quot;: [
+            &quot;/tmp/foo_w&quot;,
+            &quot;/tmp/bar_w/&quot;
+          ]
+        }
+      }
+    }
+  }</code></pre>
+
+<p>A manifest file does not have to include all the fields. Eg, a manifest file for an Ubuntu SDK application might be:</p>
+
+<pre><code>  {
+    &quot;security&quot;: {
+      &quot;profiles&quot;: {
+        &quot;com.ubuntu.developer.myusername.MyCoolApp&quot;: {
+          &quot;policy_groups&quot;: [
+            &quot;networking&quot;,
+            &quot;online-accounts&quot;
+          ],
+          &quot;policy_vendor&quot;: &quot;ubuntu&quot;,
+          &quot;policy_version&quot;: 1.0,
+          &quot;template&quot;: &quot;ubuntu-sdk&quot;,
+          &quot;template_variables&quot;: {
+            &quot;APPNAME&quot;: &quot;MyCoolApp&quot;,
+            &quot;APPVERSION&quot;: &quot;0.1.2&quot;
+          }
+        }
+      }
+    }
+  }</code></pre>
+
+</dd>
+<dt id="verify-manifest">--verify-manifest</dt>
+<dd>
+
+<p>When used with --manifest, warn about potentially unsafe definitions in the manifest file.</p>
+
+</dd>
+<dt id="output-format-FORMAT">--output-format=FORMAT</dt>
+<dd>
+
+<p>Specify either <b>text</b> (default if unspecified) for AppArmor policy output or <b>json</b> for JSON manifest format.</p>
+
+</dd>
+<dt id="output-directory-DIR">--output-directory=DIR</dt>
+<dd>
+
+<p>Specify output directory for profile. If unspecified, policy is sent to stdout.</p>
+
+</dd>
+</dl>
+
+<h1 id="EXAMPLES">EXAMPLES</h1>
+
+<p>Example usage for a program named &#39;foo&#39; which is installed in /opt/foo:</p>
+
+<pre><code>    $ aa-easyprof --template=user-application --template-var=&quot;@{APPNAME}=foo&quot; \
+                  --policy-groups=opt-application,user-application \
+                  /opt/foo/bin/FooApp</code></pre>
+
+<p>When using a manifest file:</p>
+
+<pre><code>    $ aa-easyprof --manifest=manifest.json</code></pre>
+
+<p>To output a manifest file based on aa-easyprof arguments:</p>
+
+<pre><code>    $ aa-easyprof --output-format=json \
+                  --author=&quot;Your Name&quot; \
+                  --comment=&quot;Unstructured single-line comment&quot; \
+                  --copyright=&quot;Unstructured single-line copyright statement&quot; \
+                  --name=&quot;My Foo App&quot; \
+                  --profile-name=&quot;com.example.foo&quot; \
+                  --template=&quot;user-application&quot; \
+                  --policy-groups=&quot;user-application,networking&quot; \
+                  --abstractions=&quot;audio,gnome&quot; \
+                  --read-path=&quot;/tmp/foo_r&quot; \
+                  --read-path=&quot;/tmp/bar_r/&quot; \
+                  --write-path=&quot;/tmp/foo_w&quot; \
+                  --write-path=/tmp/bar_w/ \
+                  --template-var=&quot;@{APPNAME}=foo&quot; \
+                  --template-var=&quot;@{VAR1}=bar&quot; \
+                  --template-var=&quot;@{VAR2}=baz&quot; \
+                  &quot;/opt/foo/**&quot;</code></pre>
+
+<h1 id="BUGS">BUGS</h1>
+
+<p>If you find any additional bugs, please report them to Launchpad at <a href="https://bugs.launchpad.net/apparmor/+filebug">https://bugs.launchpad.net/apparmor/+filebug</a>.</p>
+
+<h1 id="SEE-ALSO">SEE ALSO</h1>
+
+<p>apparmor(7) apparmor.d(5)</p>
+
+<table border="0" width="100%" cellspacing="0" cellpadding="3">
+<tr><td class="_podblock_" valign="middle">
+<big><strong><span class="_podblock_">&nbsp;</span></strong></big>
+</td></tr>
+</table>
+
+</body>
+
+</html>
+
+

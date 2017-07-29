@@ -1,0 +1,139 @@
+<?xml version="1.0" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title></title>
+<link rel="stylesheet" href="apparmor.css" type="text/css" />
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rev="made" href="mailto:root@localhost" />
+</head>
+
+<body>
+<table border="0" width="100%" cellspacing="0" cellpadding="3">
+<tr><td class="_podblock_" valign="middle">
+<big><strong><span class="_podblock_">&nbsp;</span></strong></big>
+</td></tr>
+</table>
+
+
+
+<ul id="index">
+  <li><a href="#NAME">NAME</a></li>
+  <li><a href="#SYNOPSIS">SYNOPSIS</a></li>
+  <li><a href="#DESCRIPTION">DESCRIPTION</a></li>
+  <li><a href="#OPTIONS">OPTIONS</a></li>
+  <li><a href="#CONFIGURATION">CONFIGURATION</a></li>
+  <li><a href="#BUGS">BUGS</a></li>
+  <li><a href="#SEE-ALSO">SEE ALSO</a></li>
+</ul>
+
+<h1 id="NAME">NAME</h1>
+
+<p>aa-notify - display information about logged AppArmor messages.</p>
+
+<h1 id="SYNOPSIS">SYNOPSIS</h1>
+
+<p><b>aa-notify</b> [option]</p>
+
+<h1 id="DESCRIPTION">DESCRIPTION</h1>
+
+<p><b>aa-notify</b> will display a summary or provide desktop notifications for AppArmor DENIED messages.</p>
+
+<h1 id="OPTIONS">OPTIONS</h1>
+
+<p><b>aa-notify</b> accepts the following arguments:</p>
+
+<dl>
+
+<dt id="p---poll">-p, --poll</dt>
+<dd>
+
+<p>poll AppArmor logs and display desktop notifications. Can be used with &#39;-s&#39; option to display a summary on startup.</p>
+
+</dd>
+<dt id="display-DISPLAY">--display $DISPLAY</dt>
+<dd>
+
+<p>set the DISPLAY environment variable to $DISPLAY (might be needed if sudo resets $DISPLAY)</p>
+
+</dd>
+<dt id="f-FILE---file-FILE">-f FILE, --file=FILE</dt>
+<dd>
+
+<p>search FILE for AppArmor messages</p>
+
+</dd>
+<dt id="l---since-last">-l, --since-last</dt>
+<dd>
+
+<p>show summary since last login.</p>
+
+</dd>
+<dt id="s-NUM---since-days-NUM">-s NUM, --since-days=NUM</dt>
+<dd>
+
+<p>show summary for last NUM of days.</p>
+
+</dd>
+<dt id="u-USER---user-USER">-u USER, --user=USER</dt>
+<dd>
+
+<p>user to drop privileges to when running privileged. When used with the -p option, this should be set to the user that will receive desktop notifications. This has no effect when running under sudo.</p>
+
+</dd>
+<dt id="w-NUM---wait-NUM">-w NUM, --wait=NUM</dt>
+<dd>
+
+<p>wait NUM seconds before displaying notifications (for use with -p)</p>
+
+</dd>
+<dt id="v---verbose">-v, --verbose</dt>
+<dd>
+
+<p>show messages with summaries.</p>
+
+</dd>
+<dt id="h---help">-h, --help</dt>
+<dd>
+
+<p>displays a short usage statement.</p>
+
+</dd>
+</dl>
+
+<h1 id="CONFIGURATION">CONFIGURATION</h1>
+
+<p>System-wide configuration for <b>aa-notify</b> is done via /etc/apparmor/notify.conf:</p>
+
+<pre><code>  # set to &#39;yes&#39; to enable AppArmor DENIED notifications
+  show_notifications=&quot;yes&quot;
+
+  # only people in use_group can use aa-notify
+  use_group=&quot;admin&quot;</code></pre>
+
+<p>Per-user configuration is done via ~/.apparmor/notify.conf:</p>
+
+<pre><code>  # set to &#39;yes&#39; to enable AppArmor DENIED notifications
+  show_notifications=&quot;yes&quot;</code></pre>
+
+<h1 id="BUGS">BUGS</h1>
+
+<p><b>aa-notify</b> needs to be able to read the logfiles containing the AppArmor DENIED messages.</p>
+
+<p>If you find any additional bugs, please report them to Launchpad at <a href="https://bugs.launchpad.net/apparmor/+filebug">https://bugs.launchpad.net/apparmor/+filebug</a>.</p>
+
+<h1 id="SEE-ALSO">SEE ALSO</h1>
+
+<p>apparmor(7)</p>
+
+<table border="0" width="100%" cellspacing="0" cellpadding="3">
+<tr><td class="_podblock_" valign="middle">
+<big><strong><span class="_podblock_">&nbsp;</span></strong></big>
+</td></tr>
+</table>
+
+</body>
+
+</html>
+
+

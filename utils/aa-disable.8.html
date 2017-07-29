@@ -1,0 +1,66 @@
+<?xml version="1.0" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title></title>
+<link rel="stylesheet" href="apparmor.css" type="text/css" />
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rev="made" href="mailto:root@localhost" />
+</head>
+
+<body>
+<table border="0" width="100%" cellspacing="0" cellpadding="3">
+<tr><td class="_podblock_" valign="middle">
+<big><strong><span class="_podblock_">&nbsp;</span></strong></big>
+</td></tr>
+</table>
+
+
+
+<ul id="index">
+  <li><a href="#NAME">NAME</a></li>
+  <li><a href="#SYNOPSIS">SYNOPSIS</a></li>
+  <li><a href="#OPTIONS">OPTIONS</a></li>
+  <li><a href="#DESCRIPTION">DESCRIPTION</a></li>
+  <li><a href="#BUGS">BUGS</a></li>
+  <li><a href="#SEE-ALSO">SEE ALSO</a></li>
+</ul>
+
+<h1 id="NAME">NAME</h1>
+
+<p>aa-disable - disable an AppArmor security profile</p>
+
+<h1 id="SYNOPSIS">SYNOPSIS</h1>
+
+<p><b>aa-disable <i>&lt;executable&gt;</i> [<i>&lt;executable&gt;</i> ...] [<i>-d /path/to/profiles</i>] [<i>-r</i>]</b></p>
+
+<h1 id="OPTIONS">OPTIONS</h1>
+
+<p><b>-d --dir /path/to/profiles</b></p>
+
+<pre><code>   Specifies where to look for the AppArmor security profile set.
+   Defaults to /etc/apparmor.d.</code></pre>
+
+<h1 id="DESCRIPTION">DESCRIPTION</h1>
+
+<p><b>aa-disable</b> is used to <i>disable</i> one or more profiles. This command will unload the profile from the kernel and prevent the profile from being loaded on AppArmor startup. The <i>aa-enforce</i> and <i>aa-complain</i> utilities may be used to to change this behavior.</p>
+
+<h1 id="BUGS">BUGS</h1>
+
+<p>If you find any bugs, please report them at <a href="https://bugs.launchpad.net/apparmor/+filebug">https://bugs.launchpad.net/apparmor/+filebug</a>.</p>
+
+<h1 id="SEE-ALSO">SEE ALSO</h1>
+
+<p>apparmor(7), apparmor.d(5), aa-enforce(1), aa-complain(1), aa_change_hat(2), and <a href="http://wiki.apparmor.net">http://wiki.apparmor.net</a>.</p>
+
+<table border="0" width="100%" cellspacing="0" cellpadding="3">
+<tr><td class="_podblock_" valign="middle">
+<big><strong><span class="_podblock_">&nbsp;</span></strong></big>
+</td></tr>
+</table>
+
+</body>
+
+</html>
+
+

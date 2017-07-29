@@ -1,0 +1,94 @@
+<?xml version="1.0" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title></title>
+<link rel="stylesheet" href="apparmor.css" type="text/css" />
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link rev="made" href="mailto:root@localhost" />
+</head>
+
+<body>
+<table border="0" width="100%" cellspacing="0" cellpadding="3">
+<tr><td class="_podblock_" valign="middle">
+<big><strong><span class="_podblock_">&nbsp;</span></strong></big>
+</td></tr>
+</table>
+
+
+
+<ul id="index">
+  <li><a href="#NAME">NAME</a></li>
+  <li><a href="#SYNOPSIS">SYNOPSIS</a></li>
+  <li><a href="#OPTIONS">OPTIONS</a></li>
+  <li><a href="#DESCRIPTION">DESCRIPTION</a></li>
+  <li><a href="#BUGS">BUGS</a></li>
+  <li><a href="#SEE-ALSO">SEE ALSO</a></li>
+</ul>
+
+<h1 id="NAME">NAME</h1>
+
+<p>aa-genprof - profile generation utility for AppArmor</p>
+
+<h1 id="SYNOPSIS">SYNOPSIS</h1>
+
+<p><b>aa-genprof <i>&lt;executable&gt;</i> [<i>-d /path/to/profiles</i>] [<i>-f /path/to/logfile</i>]</b></p>
+
+<h1 id="OPTIONS">OPTIONS</h1>
+
+<p><b>-d --dir /path/to/profiles</b></p>
+
+<pre><code>   Specifies where to look for the AppArmor security profile set.
+   Defaults to /etc/apparmor.d.</code></pre>
+
+<p><b>-f --file /path/to/logfile</b></p>
+
+<pre><code>        Specifies the location of logfile.
+        Default locations are read from F&lt;/etc/apparmor/logprof.conf&gt;.
+        Typical defaults are:
+                 /var/log/audit/audit.log
+                 /var/log/syslog
+                 /var/log/messages</code></pre>
+
+<h1 id="DESCRIPTION">DESCRIPTION</h1>
+
+<p>When running aa-genprof, you must specify a program to profile. If the specified program is not a fully-qualified path, aa-genprof will search $PATH in order to find the program.</p>
+
+<p>If a profile does not exist for the program, aa-genprof will create one using aa-autodep(1).</p>
+
+<p>Genprof will then:</p>
+
+<pre><code>   - set the profile to complain mode 
+
+   - write a mark to the system log
+
+   - instruct the user to start the application to
+     be profiled in another window and exercise its functionality</code></pre>
+
+<p>It then presents the user with two options, (S)can system log for entries to add to profile and (F)inish.</p>
+
+<p>If the user selects (S)can or hits return, aa-genprof will parse the complain mode logs and iterate through generated violations using aa-logprof(1).</p>
+
+<p>After the user finishes selecting profile entries based on violations that were detected during the program execution, aa-genprof will reload the updated profiles in complain mode and again prompt the user for (S)can and (F)inish. This cycle can then be repeated as necessary until all application functionality has been exercised without generating access violations.</p>
+
+<p>When the user eventually hits (F)inish, aa-genprof will set the main profile, and any other profiles that were generated, into enforce mode and exit.</p>
+
+<h1 id="BUGS">BUGS</h1>
+
+<p>If you find any bugs, please report them at <a href="https://bugs.launchpad.net/apparmor/+filebug">https://bugs.launchpad.net/apparmor/+filebug</a>.</p>
+
+<h1 id="SEE-ALSO">SEE ALSO</h1>
+
+<p>apparmor(7), apparmor.d(5), aa-enforce(1), aa-complain(1), aa-disable(1), aa_change_hat(2), aa-logprof(1), logprof.conf(5), and <a href="http://wiki.apparmor.net">http://wiki.apparmor.net</a>.</p>
+
+<table border="0" width="100%" cellspacing="0" cellpadding="3">
+<tr><td class="_podblock_" valign="middle">
+<big><strong><span class="_podblock_">&nbsp;</span></strong></big>
+</td></tr>
+</table>
+
+</body>
+
+</html>
+
+
