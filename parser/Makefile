@@ -25,7 +25,7 @@ APPARMOR_BIN_PREFIX=${DESTDIR}/lib/pyronia
 CONFDIR=/etc/pyronia
 INSTALL_CONFDIR=${DESTDIR}${CONFDIR}
 LOCALEDIR=/usr/share/locale
-MANPAGES=apparmor.d.5 apparmor.7 apparmor_parser.8 subdomain.conf.5
+MANPAGES=pyronia.d.5 pyronia.7 apparmor_parser.8 subdomain.conf.5
 
 YACC	:= /usr/bin/bison
 YFLAGS	:= -d
