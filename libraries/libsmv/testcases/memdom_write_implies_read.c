@@ -18,9 +18,14 @@ static void *memdom_read_trigger(void *buf) {
   return NULL;
 }
 
+static void *memdom_write_trigger(char *buf) {
+  buf[0] = 'b';
+  return NULL;
+}
+
 int main(){
   
-    printf("-- Test: thread memdom grant-revoke read fault... ");
+    printf("-- Test: thread memdom write implies read... ");
     int memdom_id = -1;
     int smv_id = -1;
     int err = 0;
@@ -50,27 +55,24 @@ int main(){
     sprintf(str, "hello");
 
     smv_join_domain(memdom_id, smv_id);
-    memdom_priv_add(memdom_id, smv_id, MEMDOM_READ);
-    
-    // first read domain
-    err = smvthread_create(smv_id, &tid1, memdom_read_trigger, str);
-    if (err == -1) {
-      printf("smvthread_create returned %d\n", err);
-    }
-    pthread_join(tid1, NULL);
+    memdom_priv_add(memdom_id, smv_id, MEMDOM_WRITE);
 
-    // revoke read access to the domain
-    memdom_priv_del(memdom_id, smv_id, MEMDOM_READ);
-    
-    printf("smv %d privs %lu memdom %d\n", smv_id, memdom_priv_get(memdom_id, smv_id), memdom_id);	
-    
-    // trigger memdom read segfault
-    err = smvthread_create(smv_id, &tid2, memdom_read_trigger, str);
+    // first write
+    err = smvthread_create(smv_id, &tid2, memdom_write_trigger, str);
     if (err == -1) {
       printf("smvthread_create returned %d\n", err);
     }
     pthread_join(tid2, NULL);
 
+    printf("after write attempt: %s\n", str);
+    
+    // try to do a read
+    err = smvthread_create(smv_id, &tid1, memdom_read_trigger, str);
+    if (err == -1) {
+      printf("smvthread_create returned %d\n", err);
+    }
+    pthread_join(tid1, NULL);	
+    
     memdom_free(str);
     
  out:
