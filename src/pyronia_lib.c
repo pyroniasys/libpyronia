@@ -21,9 +21,9 @@
 #include <linux/pyronia_mac.h>
 
 #include "pyronia_lib.h"
+#include "serialization.h"
 
 #define FAMILY_STR "SI_COMM"
-#define INT32_STR_SIZE 12
 
 static struct nl_sock *si_sock;
 static int nl_fam;
@@ -48,65 +48,6 @@ static int pyr_to_kernel(int nl_cmd, int nl_attr, char *msg) {
   return err;
 }
 
-// Serialize a callstack "object" to a tokenized string
-// that the LSM can then parse. Do basic input sanitation as well.
-// The function uses strncat(), which appends a string to the given
-// "dest" string, so the serialized callstack is ordered from root to leaf.
-// Caller must free the string.
-static int pyr_serialize_callstack(char **cs_str, pyr_cg_node_t *callstack) {
-    pyr_cg_node_t *cur_node;
-    char *ser = NULL, *out;
-    uint32_t ser_len = 1; // for null-byte
-    char *delim = CALLSTACK_STR_DELIM;
-    int ret, node_count = 0;
-
-    if (!callstack)
-        goto fail;
-
-    cur_node = callstack;
-    while (cur_node) {
-        // let's sanity check our lib name first (i.e. it should not
-        // contain our delimiter character
-        if (strchr(cur_node->lib, *delim)) {
-            printf("[%s] Oops, library name %s contains unacceptable characetr\n", __func__, cur_node->lib);
-            goto fail;
-        }
-
-        ser = realloc(ser, ser_len+strlen(cur_node->lib)+1);
-        if (!ser)
-            goto fail;
-
-        strncat(ser, cur_node->lib, strlen(cur_node->lib));
-        if (cur_node->child) {
-            // only append a delimiter if the current lib will
-            // be followed by another one (i.e. it's not the last)
-            strncat(ser, CALLSTACK_STR_DELIM, 1);
-	    ser_len++;
-	}
-        ser_len += strlen(cur_node->lib);
-        cur_node = cur_node->child;
-	node_count++;
-    }
-
-    // now we need to pre-append the len so the kernel knows how many
-    // nodes to expect to de-serialize
-    out = malloc(sizeof(char)*(ser_len+INT32_STR_SIZE));
-    if (!out)
-        goto fail;
-    ret = sprintf(out, "%d,%s", node_count, ser);
-    free(ser);
-
-    printf("[%s] Serialized callstack: %s\n", __func__, out);
-    
-    *cs_str = out;
-    return ret;
- fail:
-    if (ser)
-        free(ser);
-    *cs_str = NULL;
-    return -1;
-}
-
 /* Handle a callstack request from the kernel by calling
  * the callstack generator in the callstack library.
  * Once the callstack is generated, serialize and send the
@@ -121,7 +62,7 @@ static int handle_callstack_request(struct nl_msg *msg, void *arg) {
     char *callstack_str;
     int err;
 
-    //printf("[%s] The kernel module sent a message.\n", __func__);
+    printf("[%s] The kernel module sent a message.\n", __func__);
 
     nl_hdr = nlmsg_hdr(msg);
     genl_hdr = genlmsg_hdr(nl_hdr);
@@ -171,11 +112,9 @@ static int handle_callstack_request(struct nl_msg *msg, void *arg) {
 static void *pyr_recv_from_kernel(void *args) {
   int err = 0;
 
-  //printf("[%s] Listening at port %d\n", __func__, si_port);
-
-  // FIXME: there's probably a much better way to do this, maybe
-  // use condition variables?
   while(1) {
+    printf("[%s] Listening at port %d\n", __func__, si_port);
+    
     // Receive messages
     err = nl_recvmsgs_default(si_sock);
     if (err < 0) {
@@ -204,20 +143,18 @@ static int init_si_kernel_comm() {
                                 handle_callstack_request, NULL);
     if (err < 0) {
       printf("[%s] Could not register receive callback function. Error = %d\n", __func__, err);
-        goto error;
+        goto fail;
     }
 
     err = genl_connect(si_sock);
     if (err) {
       printf("[%s] SI netlink socket connection failed: %d\n", __func__, err);
-      goto error;
+      goto fail;
     }
-
-    pthread_create(&recv_th, NULL, pyr_recv_from_kernel, NULL);
 
     return 0;
 
- error:
+ fail:
     printf("{%s] Following libnl error occurred: %s\n", __func__, nl_geterror(err));
     if (si_sock)
       nl_socket_free(si_sock);
@@ -233,65 +170,102 @@ static int init_runtime(pyr_cg_node_t *(*collect_callstack)(void)) {
     if (!r) {
         printf("[%s] No memory for runtime properties\n", __func__);
         err = -ENOMEM;
-        goto out;
+        goto fail;
     }
 
     if (!collect_callstack) {
         printf("[%s] Need non-null callstack collect callback\n", __func__);
         err = -EINVAL;
-        goto out;
+        goto fail;
     }
     r->collect_callstack_cb = collect_callstack;
     runtime = r;
 
     printf("[%s] Successfully initialized the runtime\n", __func__);
     return 0;
- out:
-    free(r);
+ fail:
+    if (r)
+        free(r);
     return err;
+}
+
+static void init_callstack_req_thread() {
+    pthread_attr_t attr;
+
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+    pthread_create(&recv_th, &attr, pyr_recv_from_kernel, NULL);
 }
 
 /* Do all the necessary setup for a language runtime to use
  * the Pyronia extensions: open the stack inspection communication
  * channel and initialize the SMV backend.
  */
-int pyr_init(pyr_cg_node_t *(*collect_callstack_cb)(void)) {
+int pyr_init(const char *lib_policy_file,
+             pyr_cg_node_t *(*collect_callstack_cb)(void)) {
     int err = 0;
-    char str[INT32_STR_SIZE];
+    char *reg_str;
+    char *policy;
 
     /* Initialize the runtime metadata */
     err = init_runtime(collect_callstack_cb);
     if (err) {
       printf("[%s] Runtime initialization failure\n", __func__);
+      goto out;
     }
 
     /* Initialize the SI socket */
     err = init_si_kernel_comm();
     if (err) {
       printf("[%s] SI socket initialization failure\n", __func__);
+      goto out;
     }
 
     nl_fam = get_family_id(nl_socket_get_fd(si_sock), si_port, FAMILY_STR);
 
-    sprintf(str, "%d", si_port);
-    err = pyr_to_kernel(SI_COMM_C_REGISTER_PROC, SI_COMM_A_USR_MSG, str);
+    /* Parse the library policy from disk */
+    err = pyr_parse_lib_policy(lib_policy_file, &policy);
+    if (err < 0) {
+        printf("[%s] Parsing lib policy failure\n", __func__);
+        goto out;
+    }
+    
+    /* Register this process as a Pyronia-secured process */
+    reg_str = malloc(INT32_STR_SIZE+strlen(policy)+2);
+    if (!reg_str) {
+        goto out;
+    }
 
-    if (!err)
-          printf("[%s] Initialized socket at port %d; SI_COMM family id = %d\n",
-           __func__, si_port, nl_fam);
+    sprintf(reg_str, "%d:%s", si_port, policy);
+    err = pyr_to_kernel(SI_COMM_C_REGISTER_PROC, SI_COMM_A_USR_MSG, reg_str);
+    if (err) {
+        goto out;
+    }
+
+    /* Start the callstack request receiver thread */
+    init_callstack_req_thread();
 
     // We don't want the main thread's memdom to be
     // globally accessible, so init with 0.
     // err = smv_main_init(0);
+    
+ out:
+    if (policy)
+      free(policy);
+    if (reg_str)
+      free(reg_str);
 
+    if (!err)
+      printf("[%s] Initialized socket at port %d; SI_COMM family id = %d\n",
+           __func__, si_port, nl_fam);
+    
     return err;
 }
 
 /* Do all necessary teardown actions. */
 void pyr_exit() {
   printf("[%s] Exiting Pyronia runtime\n", __func__);
-
-  // TODO: kill the receiver thread
 
   if (si_sock)
     nl_socket_free(si_sock);
@@ -318,7 +292,8 @@ int pyr_new_cg_node(pyr_cg_node_t **cg_root, const char* lib,
     *cg_root = n;
     return 0;
  fail:
-    free(n);
+    if (n)
+        free(n);
     return -1;
 }
 
@@ -331,7 +306,6 @@ static void free_node(pyr_cg_node_t **node) {
     }
 
     if (n->child == NULL) {
-        n->lib = NULL;
         free(n->lib);
         free(n);
     }
