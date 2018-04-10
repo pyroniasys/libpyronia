@@ -7,7 +7,7 @@
 
 #include "testutil.h"
 
-#define LIB_POLICY "/home/pyronia/libpyronia/testsuite/home.pyronia.kernel_upcall_test-lib.prof"
+#define LIB_POLICY "/home/pyronia/libpyronia/testsuite/home.pyronia.callgraph_perms_fail_test-lib.prof"
 
 static int test_type = 0;
 
@@ -19,7 +19,7 @@ pyr_cg_node_t *test_callgraph_creation() {
     int len = 3;
     
     if (!test_type) {
-      // insert the camera libs in reverse order to mimic
+      // insert the libs in reverse order to mimic
       // traversing up the call stack
       for (i = len-1; i >= 0; i--) {
         pyr_cg_node_t *next;
@@ -30,11 +30,10 @@ pyr_cg_node_t *test_callgraph_creation() {
           return NULL;
         }
         child = next;
-        i--;
       }
     }
     else {
-      err = pyr_new_cg_node(&child, test_libs[1], CAM_DATA, NULL);
+      err = pyr_new_cg_node(&child, test_libs[2], CAM_DATA, NULL);
         if (err) {
           printf("[%s] Could not create cg node for lib %s\n", __func__, test_libs[1]);
           return NULL;
@@ -56,38 +55,24 @@ int main (int argc, char *argv[]) {
     goto out;
   }
 
-  printf("---Testing authorized file open\n");
+  printf("---Testing hidden network connection open\n");
   
+  test_type = 0;
+  ret = test_connect();
+  if (!ret)
+    goto out;
+
+  printf("---Testing hidden file open\n");
+
   test_type = 0;
   ret = test_file_open();
-  if (ret)
+  if (!ret)
     goto out;
 
-  printf("---Testing authorized network access\n");
-
-  test_type = 1;
-  ret = test_connect();
-  if (ret)
-    goto out;
-
-  printf("---Testing unauthorized file open\n");
+  printf("---Testing unknown lib alone\n");
   
-  test_type = 0;
-  ret = test_file_open_fail();
-  if (ret) {
-    goto out;
-  }
-
-  printf("---Testing authorized file open, bad permissions\n");
-  ret = test_file_open_write();
-  if (ret) {
-    goto out;
-  }
-
   test_type = 1;
-  printf("---Testing unauthorized network access\n");
-
-  ret = test_connect_fail();
+  ret = test_file_open();
   
  out:
   return ret;
