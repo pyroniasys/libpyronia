@@ -45,6 +45,7 @@ int main(){
 
     for (i = 0; i < NUM_THREADS; i++) {
         rv = smvthread_create(smv_id[i], &tid[i], fn, NULL);
+        //rv = pthread_create(&tid[i], NULL, fn, NULL);
         if (rv == -1) {
             printf("smvthread_create error\n");
         }

@@ -47,14 +47,16 @@ int main (int argc, char *argv[]) {
   int ret = 0;
   int i;
 
+  printf("******* Callgraph Perms Fail Test ********\n");
+  
   init_testlibs();
 
-  ret = pyr_init(LIB_POLICY, test_callgraph_creation);
+  ret = pyr_init("callgraph_perms_fail_test", LIB_POLICY, test_callgraph_creation);
   if (ret) {
     printf("Error initializing Pyronia: %d\n", ret);
     goto out;
   }
-
+  
   printf("---Testing hidden network connection open\n");
   
   test_type = 0;
@@ -73,7 +75,8 @@ int main (int argc, char *argv[]) {
   
   test_type = 1;
   ret = test_file_open();
-  
+
  out:
+  pyr_exit();
   return ret;
 }

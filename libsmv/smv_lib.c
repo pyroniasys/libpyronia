@@ -11,26 +11,26 @@
 #include <limits.h>
 #include "smv_lib.h"
 
-#define FAMILY_STR "CONTROL_EXMPL"
 #define NL_CMD 1
 #define NL_ATTR 1
 
 pthread_mutex_t create_thread_mutex;
 int ALLOW_GLOBAL; // 1: all threads can access global memdom, 0 otherwise
 
-static int nl_sock;
+static char *FAMILY_STR = "CONTROL_EXMPL";
 static int nl_fam;
 static uint32_t port_id;
 
 /* libsmv-specific wrapper around send_message in kernel_comm.h */
 int message_to_kernel(char *message) {
-  int err = -1;;
+  int err = -1;
+  int nl_sock;
   nl_sock = create_netlink_socket(0);
   if(nl_sock < 0){
     printf("create netlink socket failure\n");
     goto out;
   }
-  
+
   err = send_message(nl_sock, nl_fam, NL_CMD, NL_ATTR, port_id, message);
 
  out:
@@ -42,6 +42,7 @@ int message_to_kernel(char *message) {
  * The master thread must call this routine to notify the kernel its status */
 int smv_main_init(int global) {
   int rv = -1;
+  int nl_sock;
   ALLOW_GLOBAL = 0;
 
   /* Open the netlink socket */
@@ -55,14 +56,14 @@ int smv_main_init(int global) {
 
   nl_fam = get_family_id(nl_sock, port_id, FAMILY_STR);
   teardown_netlink_socket(nl_sock);
-  
+
   /* Set mm->using_smv to true in kernel space */
   rv = message_to_kernel("smv,maininit");
   if (rv != 0) {
     fprintf(stderr, "smv_main_init() failed\n");
     return -1;
   }
-  rlog("kernel responded %d\n", rv);
+  rlog("[%s] kernel responded %d\n", __func__, rv);
 
   /* Initialize mutex for protecting smv_thread_create */
   pthread_mutex_init(&create_thread_mutex, NULL);
@@ -84,7 +85,7 @@ int smv_create(void) {
     fprintf(stderr, "smv_create() failed\n");
     return -1;
   }
-  rlog("kernel responded smv id %d\n", smv_id);
+  rlog("[%s] kernel responded smv id %d\n", __func__, smv_id);
   return smv_id;
 }
 
@@ -98,7 +99,7 @@ int smv_kill(int smv_id) {
     fprintf(stderr, "smv_kill(%d) failed\n", smv_id);
     return -1;
   }
-  rlog("smv ID %d killed\n", smv_id);
+  rlog("[%s] smv ID %d killed\n", __func__, smv_id);
   return rv;
 }
 
@@ -112,7 +113,7 @@ int smv_join_domain(int memdom_id, int smv_id) {
     fprintf(stderr, "smv_join_domain(smv %d, memdom %d) failed\n", smv_id, memdom_id);
     return -1;
   }
-  rlog("smv ID %d joined memdom ID %d\n", smv_id, memdom_id);
+  rlog("[%s] smv ID %d joined memdom ID %d\n", __func__, smv_id, memdom_id);
   return 0;
 }
 
@@ -126,7 +127,7 @@ int smv_leave_domain(int memdom_id, int smv_id) {
     fprintf(stderr, "smv_leave_domain(smv %d, memdom %d) failed\n", smv_id, memdom_id);
     return -1;
   }
-  rlog("smv ID %d left memdom ID %d\n", smv_id, memdom_id);
+  rlog("[%s] smv ID %d left memdom ID %d\n", __func__, smv_id, memdom_id);
   return rv;
 }
 
@@ -140,7 +141,7 @@ int smv_is_in_domain(int memdom_id, int smv_id) {
     fprintf(stderr, "smv_is_in_domain(smv %d, memdom %d) failed\n", smv_id, memdom_id);
     return -1;
   }
-  rlog("smv ID %d in memdom ID %d?: %d\n", smv_id, memdom_id, rv);
+  rlog("[%s] smv ID %d in memdom ID %d?: %d\n", __func__, smv_id, memdom_id, rv);
   return rv;
 }
 
@@ -155,7 +156,7 @@ int smv_exists(int smv_id) {
     return -1;
   }
 
-  rlog("smv ID %d exists? %d\n", smv_id, rv);
+  rlog("[%s] smv ID %d exists? %d\n", __func__, smv_id, rv);
   return rv;
 }
 
@@ -167,13 +168,13 @@ int smv_exists(int smv_id) {
  * Return the smv_id the new thread is running in. On error, return -1.
  * If defined as pthread_create, we should return 0 but not the smv id.
  */
-int smvthread_create(int smv_id, pthread_t* tid, void*(fn)(void*), void* args){
+int smvthread_create_attr(int smv_id, pthread_t* tid, const pthread_attr_t *attr, void*(fn)(void*), void* args){
   int rv = 0;
   char buf[100];
   int memdom_id;
-  pthread_attr_t attr;
   void* stack_base;
   unsigned long stack_size;
+  pthread_attr_t attr1;
 
   /* When caller specify smv_id = -1, smvthread_create automatically creates a new smv
    * for the about-to-run thread to running in.
@@ -183,12 +184,16 @@ int smvthread_create(int smv_id, pthread_t* tid, void*(fn)(void*), void* args){
     fprintf(stderr, "creating a new smv %d for the new thread to run in\n", smv_id);
   }
 
+  rlog("[%s] smv = %d\n", __func__, smv_id);
+
   /* Block thread if it tries to run in a non-existing smv */
   if(!smv_exists(smv_id)){
     fprintf(stderr, "thread cannot run in a non-existing smv %d\n", smv_id);
     return -1;
   }
 
+  rlog("[%s] smv %d exists \n", __func__, smv_id);
+  
   /* Join the global memdom if the main thread allows all threads to access the global memory areas */
   if(ALLOW_GLOBAL){
     smv_join_domain(0, smv_id);
@@ -196,9 +201,15 @@ int smvthread_create(int smv_id, pthread_t* tid, void*(fn)(void*), void* args){
   }
 
   /* Atomic operation */
-  pthread_mutex_lock(& create_thread_mutex);
+  pthread_mutex_lock(&create_thread_mutex);
 
-  pthread_attr_init(& attr);
+  if (attr == NULL)
+    pthread_attr_init(&attr1);
+  else {
+    attr1 = *attr;
+    rlog("[%s] set thread attrs %p\n", __func__, &attr1);
+  }
+
 #ifdef THREAD_PRIVATE_STACK // Use private stack for thread
   /* Create a thread-local memdom and make smv join it */
   memdom_id = memdom_create();
@@ -226,12 +237,11 @@ int smvthread_create(int smv_id, pthread_t* tid, void*(fn)(void*), void* args){
     pthread_mutex_unlock(& create_thread_mutex);
     return -1;
   }
-  pthread_attr_setstack(& attr, stack_base, stack_size);
+  pthread_attr_setstack(attr1, stack_base, stack_size);
   printf("[%s] creating thread with stack base: %p, end: 0x%lx\n", __func__, stack_base, (unsigned long)stack_base + stack_size);
 
   /* Record thread-private memdom addr and size */
-  memdom[memdom_id]->start = stack_base;
-  memdom[memdom_id]->total_size = stack_size;
+  add_new_mmap_block(memdom_id, stack_base, stack_size);
 
 #endif // THREAD_PRIVATE_STACK
 
@@ -241,22 +251,23 @@ int smvthread_create(int smv_id, pthread_t* tid, void*(fn)(void*), void* args){
   rv = message_to_kernel(buf);
   if(rv != 0){
         fprintf(stderr, "register_smv_thread for smv %d failed\n", smv_id);
-    pthread_mutex_unlock(& create_thread_mutex);
-    return -1;
+        pthread_mutex_unlock(& create_thread_mutex);
+        return -1;
   }
+
+  rlog("[%s] registered smv thread for smv %d\n", __func__, smv_id); 
 
 #ifdef INTERCEPT_PTHREAD_CREATE
 #undef pthread_create
 #endif
   /* Create a pthread (kernel knows it's a smv thread because we registered a smv id for this thread */
   /* Use the real pthread_create */
-  rv = pthread_create(tid, &attr, fn, args);
+  rv = pthread_create(tid, &attr1, fn, args);
   if(rv){
     fprintf(stderr, "pthread_create for smv %d failed\n", smv_id);
-    pthread_mutex_unlock(& create_thread_mutex);
+    pthread_mutex_unlock(&create_thread_mutex);
     return -1;
   }
-  fprintf(stderr, "smv %d is ready to run\n", smv_id);
 
 #ifdef INTERCEPT_PTHREAD_CREATE
   /* Set return value to 0 to avoid pthread_create error */
@@ -269,6 +280,28 @@ int smvthread_create(int smv_id, pthread_t* tid, void*(fn)(void*), void* args){
   /* Main thread should leave the thread's memdom after the setup */
   smv_leave_domain(memdom_id, 0);
 #endif
-  pthread_mutex_unlock(& create_thread_mutex);
+  pthread_mutex_unlock(&create_thread_mutex);
+  fprintf(stderr, "smv %d is ready to run\n", smv_id);
   return smv_id;
+}
+
+/* Wrapper around the more generic smvthread_create function
+ * for threads than can run with default attributes.
+ */
+int smvthread_create(int smv_id, pthread_t* tid, void*(fn)(void*), void* args) {
+  return smvthread_create_attr(smv_id, tid, NULL, fn, args);
+}
+
+int smvthread_get_id() {
+  int rv = 0;
+  char buf[50];
+  sprintf(buf, "smv,getsmvid");
+  rv = message_to_kernel(buf);
+  if (rv == -1) {
+    fprintf(stderr, "smvthread_get_id() failed\n");
+    return -1;
+  }
+
+  rlog("[%s] current smv ID: %d\n", __func__, rv);
+  return rv;
 }

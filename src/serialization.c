@@ -10,14 +10,16 @@
 #include <errno.h>
 #include <error.h>
 #include <linux/pyronia_mac.h>
+#include <memdom_lib.h>
 
+#include "pyronia_lib.h"
 #include "serialization.h"
 
 // Serialize a callstack "object" to a tokenized string
 // that the LSM can then parse. Do basic input sanitation as well.
 // The function uses strncat(), which appends a string to the given
 // "dest" string, so the serialized callstack is ordered from root to leaf.
-// Caller must free the string.
+// Caller must memdom_free the string.
 int pyr_serialize_callstack(char **cs_str, pyr_cg_node_t *callstack) {
     pyr_cg_node_t *cur_node;
     char *ser = NULL, *out = NULL, *tmp_ser = NULL;
@@ -55,11 +57,13 @@ int pyr_serialize_callstack(char **cs_str, pyr_cg_node_t *callstack) {
         ser_len += strlen(cur_node->lib)+1;
         cur_node = cur_node->child;
         node_count++;
+
+	printf("[%s] Serialized node: %s, # nodes %d\n", __func__, ser, node_count);
     }
 
     // now we need to pre-append the len so the kernel knows how many
     // nodes to expect to de-serialize
-    out = malloc(strlen(ser)+INT32_STR_SIZE+2);
+    out = pyr_alloc_critical_runtime_state(strlen(ser)+INT32_STR_SIZE+2);
     if (!out)
         goto fail;
     memset(out, 0, strlen(ser)+INT32_STR_SIZE+2);
@@ -85,13 +89,14 @@ static int read_policy_file(const char *policy_fname, char **buf) {
         fseek(f, 0, SEEK_END);
         length = ftell(f);
         fseek(f, 0, SEEK_SET);
-        buffer = malloc(length+1);
+        buffer = pyr_alloc_critical_runtime_state(length+1);
         if (!buffer) {
+	  printf("[%s] Could not allocate the protected buffer\n", __func__);
             goto fail;
         }
         read = fread(buffer, 1, length, f);
         if (read != length) {
-          printf("bad length: %d != %d\n", read, length);
+          printf("[%s] Bad read length: %d != %d\n", __func__, read, length);
           goto fail;
         }
 	buffer[length] = '\0';
@@ -99,9 +104,12 @@ static int read_policy_file(const char *policy_fname, char **buf) {
 	fclose(f);
         return length;
     }
+    else {
+        printf("[%s] Could not open the lib policy file %s\n", __func__, policy_fname);
+    }
  fail:
     if (buffer)
-        free(buffer);
+        pyr_free_critical_state(buffer);
     if (f)
         fclose(f);
     *buf = NULL;
@@ -119,10 +127,12 @@ int pyr_parse_lib_policy(const char *policy_fname, char **parsed) {
     int ret;
 
     char *policy;
+    char *policyp;
     ret = read_policy_file(policy_fname, &policy);
     if (ret < 0) {
         goto fail;
     }
+    policyp = policy;
     
     // loop through the policy to serialize it into
     // a format that can be interpreted by the LSM
@@ -164,20 +174,23 @@ int pyr_parse_lib_policy(const char *policy_fname, char **parsed) {
 
     // now we need to pre-append the len so the kernel knows how many
     // nodes to expect to de-serialize
-    out = malloc(strlen(ser)+INT32_STR_SIZE+2);
+    out = pyr_alloc_critical_runtime_state(strlen(ser)+INT32_STR_SIZE+2);
     if (!out) {
         ret = -1;
         goto fail;
     }
     memset(out, 0, strlen(ser)+INT32_STR_SIZE+2);
     ret = sprintf(out, "%d,%s", count, ser);
-    free(ser);
-
-    *parsed = out;
-    return ret;
+    goto done;
+    
  fail:
+    out = NULL;
+    
+ done:
+    if (policyp)
+      pyr_free_critical_state(policyp);
     if (ser)
         free(ser);
-    *parsed = NULL;
+    *parsed = out;
     return ret;
 }

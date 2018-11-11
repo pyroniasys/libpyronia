@@ -6,308 +6,533 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
-#include <sys/syscall.h>
-#include <kernel_comm.h>
 #include <pthread.h>
-#include <netlink/netlink.h>
-#include <netlink/msg.h>
-#include <netlink/socket.h>
-#include <netlink/genl/genl.h>
-#include <netlink/genl/ctrl.h>
-#include <linux/pyronia_netlink.h>
+#include <sys/syscall.h>
 #include <linux/pyronia_mac.h>
+#include <smv_lib.h>
+#include <memdom_lib.h>
 
 #include "pyronia_lib.h"
+#include "security_context.h"
 #include "serialization.h"
+#include "si_comm.h"
+#include "util.h"
 
-#define FAMILY_STR "SI_COMM"
-#define NUM_CS_REQ_MSGS 1
-
-static struct nl_sock *si_sock;
-static int nl_fam;
-static uint32_t si_port;
-struct pyr_runtime *runtime;
-
+static struct pyr_security_context *runtime = NULL;
+static int pyr_smv_id = -1;
+static int si_smv_id = -1;
+static int is_build = 0;
 static pthread_t recv_th;
+static int num_interp_memdoms_in_use = 1;
+static pyr_interp_dom_alloc_t *allocs_tail = NULL;
 
-/* libpyronia-specific wrapper around send_message in kernel_comm.h */
-static int pyr_to_kernel(int nl_cmd, int nl_attr, char *msg) {
-  int err = -1;
-  char *m;
-
-  if (!msg)
-      m = "ERR";
-  else
-      m = msg;
-
-  err = send_message(nl_socket_get_fd(si_sock), nl_fam, nl_cmd, nl_attr, si_port, m);
-
- out:
-  return err;
-}
-
-/* Handle a callstack request from the kernel by calling
- * the callstack generator in the callstack library.
- * Once the callstack is generated, serialize and send the
- * callstack back to the kernel.
- */
-static int handle_callstack_request(struct nl_msg *msg, void *arg) {
-    struct nlmsghdr *nl_hdr = NULL;
-    struct genlmsghdr *genl_hdr = NULL;
-    struct nlattr *attrs[SI_COMM_A_MAX];
-    uint8_t *reqp;
-    pyr_cg_node_t *callstack = NULL;
-    char *callstack_str = NULL;
-    int err = -1;
-    int count = 0; //used to make sure we're getting the right number of messages
-    
-    printf("[%s] The kernel module sent a message.\n", __func__);
-
-    nl_hdr = nlmsg_hdr(msg);
-    genl_hdr = genlmsg_hdr(nl_hdr);
-    
-    if (genl_hdr->cmd != SI_COMM_C_STACK_REQ) {
-      printf("[%s] Unsupported command %d\n", __func__, genl_hdr->cmd);
-      goto out;
-    }
-    
-    err = genlmsg_parse(nl_hdr, 0, attrs, SI_COMM_A_MAX, si_comm_genl_policy);
-    if (err)
-      goto out;
-    
-    printf("[%s] Received GENL SI_COMM msg\n", __func__);
-    
-    // ignore any attributes other than the KERN_REQ
-    if (attrs[SI_COMM_A_KERN_REQ]) {
-      reqp = (uint8_t *)nla_data(attrs[SI_COMM_A_KERN_REQ]);
-      if (*reqp != STACK_REQ_CMD) {
-	printf("[%s] Unexpected kernel message: %u\n", __func__, *reqp);
-	goto out;
-      }
-    }
-    else {
-      printf("[%s] Null message from the kernel message\n", __func__);
-      goto out;
-    }
-    count++;
-    
-    // Collect and serialize the callstack
-    callstack = runtime->collect_callstack_cb();
-    err = pyr_serialize_callstack(&callstack_str, callstack);
-    if (err > 0) {
-      printf("[%s] Sending serialized callstack %s (%d bytes) to kernel\n", __func__, callstack_str, err);
-      err = 0;
-    }
-
- out:
-    if (err) 
-      err = pyr_to_kernel(SI_COMM_C_STACK_REQ, SI_COMM_A_USR_MSG, NULL);
-    else
-      err = pyr_to_kernel(SI_COMM_C_STACK_REQ, SI_COMM_A_USR_MSG, callstack_str);
-
-    if (callstack)
-        pyr_free_callgraph(&callstack);
-    if (callstack_str)
-        free(callstack_str);
-    return err;
-}
-
-// this gets called in a separate receiver thread
-// so just make the function signature fit what pthread_create expects
-static void *pyr_recv_from_kernel(void *args) {
-  int err = 0;
-
-  while(1) {
-    printf("[%s] Listening at port %d\n", __func__, nl_socket_get_local_port(si_sock));
-    
-    // Receive messages
-    err = nl_recvmsgs_default(si_sock);
-    if (err < 0) {
-      printf("[%s] Error: %d\n", __func__, err);
-      break;
-    }
-  }
-
-  printf("[%s] Got here!!!!\n", __func__);
-  pyr_exit();
-  return NULL;
-}
-
-static int init_si_kernel_comm() {
-    int err;
-
-    si_sock = nl_socket_alloc();
-    if (!si_sock) {
-      printf("[%s] Could not allocate SI netlink socket\n", __func__);
-        return -1;
-    }
-    nl_socket_disable_seq_check(si_sock);
-    nl_socket_disable_auto_ack(si_sock);
-
-    si_port = getpid();
-    nl_socket_set_local_port(si_sock, si_port);
-
-    err = nl_socket_modify_cb(si_sock, NL_CB_MSG_IN, NL_CB_CUSTOM,
-                                handle_callstack_request, NULL);
-    if (err < 0) {
-      printf("[%s] Could not register receive callback function. Error = %d\n", __func__, err);
-        goto fail;
-    }
-
-    err = genl_connect(si_sock);
-    if (err) {
-      printf("[%s] SI netlink socket connection failed: %d\n", __func__, err);
-      goto fail;
-    }
-
-    return 0;
-
- fail:
-    printf("{%s] Following libnl error occurred: %s\n", __func__, nl_geterror(err));
-    if (si_sock)
-      nl_socket_free(si_sock);
-    return err;
-}
-
-static int init_runtime(pyr_cg_node_t *(*collect_callstack)(void)) {
-    struct pyr_runtime *r;
-    int err = 0;
-
-    // TODO: allocate this in the secure memdom
-    r = malloc(sizeof(struct pyr_runtime));
-    if (!r) {
-        printf("[%s] No memory for runtime properties\n", __func__);
-        err = -ENOMEM;
-        goto fail;
-    }
-
-    if (!collect_callstack) {
-        printf("[%s] Need non-null callstack collect callback\n", __func__);
-        err = -EINVAL;
-        goto fail;
-    }
-    r->collect_callstack_cb = collect_callstack;
-    runtime = r;
-
-    printf("[%s] Successfully initialized the runtime\n", __func__);
-    return 0;
- fail:
-    if (r)
-        free(r);
-    return err;
-}
-
-static void init_callstack_req_thread() {
-    pthread_attr_t attr;
-
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-    pthread_create(&recv_th, &attr, pyr_recv_from_kernel, NULL);
-}
-
-/* Do all the necessary setup for a language runtime to use
+/** Do all the necessary setup for a language runtime to use
  * the Pyronia extensions: open the stack inspection communication
  * channel and initialize the SMV backend.
+ * Note: This function revokes access to the interpreter domain at the end.
  */
-int pyr_init(const char *lib_policy_file,
-             pyr_cg_node_t *(*collect_callstack_cb)(void)) {
-    int err = 0;
-    char *reg_str;
-    char *policy;
+int pyr_init(const char *main_mod_path,
+             const char *lib_policy_file,
+             pyr_cg_node_t *(*collect_callstack_cb)(void),
+	     void (*interpreter_lock_acquire_cb)(void),
+	     void (*interpreter_lock_release_cb)(void)) {
+    int err = 0, i = 0;
+    char *policy = NULL;
+    pthread_mutexattr_t attr;
 
-    /* Initialize the runtime metadata */
-    err = init_runtime(collect_callstack_cb);
-    if (err) {
-      printf("[%s] Runtime initialization failure\n", __func__);
-      goto out;
+    is_inspecting_stack = true;
+    rlog("[%s] Initializing pyronia for module %s\n", __func__, main_mod_path);
+
+    // We make an exception for setup.py and the sysconfig modules
+    // so we don't somehow clobber installs with Pyronia checks
+    if (main_mod_path == NULL || !strcmp(main_mod_path, "../setup.py") ||
+        !strcmp(main_mod_path, "sysconfig")) {
+      is_build = 1;
+      runtime = NULL;
+      return 0;
     }
 
-    /* Initialize the SI socket */
-    err = init_si_kernel_comm();
-    if (err) {
-      printf("[%s] SI socket initialization failure\n", __func__);
-      goto out;
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+    pthread_mutex_init(&security_ctx_mutex, &attr);
+    pthread_cond_init(&si_cond_var, NULL);
+    
+    /* Register with the memdom subsystem */
+    // We don't want the main thread's memdom to be
+    // globally accessible, so init with 0.
+    err = smv_main_init(0);
+    if (err < 0) {
+        printf("[%s] Memdom subsystem registration failure\n", __func__);
+        goto out;
     }
 
-    nl_fam = get_family_id(nl_socket_get_fd(si_sock), si_port, FAMILY_STR);
+    // create another SMV to be used by threads originally created by
+    // pthread_create. We won't allow mixing pthreads woth smvthreads
+    /*    pyr_smv_id = smv_create();
+    if (pyr_smv_id == -1) {
+      printf("[%s] Could not create an SMV for pyronia threads\n", __func__);
+      goto out;
+    }
+    // We need this SMV to be able to access any Python functions
+    smv_join_domain(MAIN_THREAD, pyr_smv_id);
+    memdom_priv_add(MAIN_THREAD, pyr_smv_id, MEMDOM_READ | MEMDOM_WRITE);
+    */
+    
+    /* Initialize the runtime's security context */
+    err = pyr_security_context_alloc(&runtime, collect_callstack_cb,
+				     interpreter_lock_acquire_cb,
+				     interpreter_lock_release_cb);
+    if (!err) {
+      allocs_tail = runtime->interp_doms;
+      err = set_str(main_mod_path, &runtime->main_path);
+    }
+    if (err) {
+        printf("[%s] Runtime initialization failure\n", __func__);
+        goto out;
+    }
 
     /* Parse the library policy from disk */
     err = pyr_parse_lib_policy(lib_policy_file, &policy);
     if (err < 0) {
-        printf("[%s] Parsing lib policy failure\n", __func__);
-        goto out;
-    }
-    
-    /* Register this process as a Pyronia-secured process */
-    reg_str = malloc(INT32_STR_SIZE+strlen(policy)+2);
-    if (!reg_str) {
-        goto out;
+      printf("[%s] Parsing lib policy failure: %d\n", __func__, err);
+      goto out;
     }
 
-    sprintf(reg_str, "%d:%s", si_port, policy);
-    err = pyr_to_kernel(SI_COMM_C_REGISTER_PROC, SI_COMM_A_USR_MSG, reg_str);
+    /* Initialize the stack inspection communication channel with
+     * the kernel */
+    err = pyr_init_si_comm(policy);
     if (err) {
+        printf("[%s] SI comm channel initialization failed\n", __func__);
         goto out;
     }
 
-    printf("[%s] Sent registration message %s (%lu bytes)\n", __func__, reg_str, strlen(reg_str));
+    //    PyEval_InitThreads(); // needed to enable stack inspector
     
-    /* Start the callstack request receiver thread */
-    init_callstack_req_thread();
-
-    // We don't want the main thread's memdom to be
-    // globally accessible, so init with 0.
-    // err = smv_main_init(0);
-    
+    pyr_callstack_req_listen();
+    pyr_is_inspecting(); // we want to wait for the listener to be ready
  out:
     if (policy)
-      free(policy);
-    if (reg_str)
-      free(reg_str);
-
+      pyr_free_critical_state(policy);
+    /* Revoke access to the interpreter domain now */
+    pyr_revoke_critical_state_write(NULL);
     if (!err)
-      printf("[%s] Initialized socket at port %d; SI_COMM family id = %d\n",
-           __func__, si_port, nl_fam);
-    
+      rlog("[%s] Initialized pyronia extensions\n", __func__);
     return err;
+}
+
+static void new_interp_memdom() {
+  int interp_memdom = -1;
+  pyr_interp_dom_alloc_t *new_dom = NULL;
+
+  if (num_interp_memdoms_in_use+1 > MAX_NUM_INTERP_DOMS)
+    return;
+  
+  new_dom = malloc(sizeof(pyr_interp_dom_alloc_t));
+  if (!new_dom)
+    goto fail;
+  interp_memdom = memdom_create();
+  if(interp_memdom == -1) {
+    printf("[%s] Could not create interpreter dom # %d\n", __func__, num_interp_memdoms_in_use+1);
+    goto fail;
+  }
+  // don't forget to add the main thread to this memdom
+  smv_join_domain(interp_memdom, MAIN_THREAD);
+  memdom_priv_add(interp_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
+  
+  new_dom->memdom_id = interp_memdom;
+  new_dom->start = NULL;
+  new_dom->end = NULL;
+  new_dom->has_space = true;
+  new_dom->writable = true;
+  new_dom->next = NULL;
+
+  // for big profiles, we're going to be calling this functions before
+  // we even launch the SI thread
+  if (si_smv_id != -1) {
+    smv_join_domain(new_dom->memdom_id, si_smv_id);
+    memdom_priv_add(new_dom->memdom_id, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);
+  }
+  
+  // insert at tail
+  allocs_tail->next = new_dom;
+  allocs_tail = new_dom;
+  
+  num_interp_memdoms_in_use++;
+  return;
+ fail:
+  if (new_dom)
+    free(new_dom);
+}
+
+/** Wrapper around memdom_alloc in the interpreter domain.
+ */
+void *pyr_alloc_critical_runtime_state(size_t size) {
+    void *new_block = NULL;
+    int i = 0;
+    pyr_interp_dom_alloc_t *dalloc = NULL;
+    if (is_build)
+      return malloc(size);
+
+    if (!runtime)
+        return NULL;
+
+    if(size > MEMDOM_HEAP_SIZE) {
+      rlog("[%s] Requested size is too large for interpreter dom.\n", __func__);
+      return malloc(size);
+    }
+    
+    pthread_mutex_lock(&security_ctx_mutex);
+    dalloc = runtime->interp_doms;
+    while(dalloc) {
+        if (dalloc->has_space &&
+	    memdom_get_free_bytes(dalloc->memdom_id) >= size) {
+            new_block = memdom_alloc(dalloc->memdom_id, size);
+
+            if (new_block) {
+                if (!dalloc->start) {
+                    // this is our first allocation in this memdom
+                    // so update the allocation metadata
+                    dalloc->start = new_block;
+                    dalloc->end = new_block+MEMDOM_HEAP_SIZE;
+                }
+	        rlog("[%s] Allocated %lu bytes in memdom %d\n", __func__, size, dalloc->memdom_id);
+                break;
+	    }
+            else {
+	      dalloc->has_space = false;
+	      rlog("[%s] Memdom allocator could not find a suitable block in memdom %d. Current number of active memdoms: %d\n", __func__, dalloc->memdom_id, num_interp_memdoms_in_use);
+	      if (dalloc->next == NULL) {
+		//num_interp_memdoms_in_use++;
+		new_interp_memdom();
+	      }
+            }
+        }
+	else {
+	  if (dalloc->has_space)
+	    dalloc->has_space = false;
+	  if (num_interp_memdoms_in_use == dalloc->memdom_id) {
+	    rlog("[%s] Not enough space in any active memdoms. Current number of active memdoms: %d\n", __func__, num_interp_memdoms_in_use);
+	    //num_interp_memdoms_in_use++;
+	    new_interp_memdom();
+	  }
+	}
+
+	// let's make sure we never have more than MAX_NUM_INTERP_DOMS active
+	if (num_interp_memdoms_in_use > MAX_NUM_INTERP_DOMS) {
+	  num_interp_memdoms_in_use = MAX_NUM_INTERP_DOMS;
+	  break;
+	}
+	dalloc = dalloc->next;
+    }
+    pthread_mutex_unlock(&security_ctx_mutex);
+    return new_block;
+}
+
+static pyr_interp_dom_alloc_t *get_interp_dom_memdom(void *op) {
+    int id = 0;
+    pyr_interp_dom_alloc_t *dalloc = NULL;
+    
+    pthread_mutex_lock(&security_ctx_mutex);
+    dalloc = runtime->interp_doms;
+    while(dalloc) {
+        if (op >= dalloc->start &&
+            op < dalloc->end) {
+            goto out;
+        }
+	dalloc = dalloc->next;
+    }
+ out:
+    pthread_mutex_unlock(&security_ctx_mutex);
+    return dalloc;
+}
+
+/** Wrapper around memdom_free in the interpreter domain.
+ * Returns 1 if the state was freed, 0 otherwise.
+ */
+int pyr_free_critical_state(void *op) {
+    int obj_memdom = -1;
+    pyr_interp_dom_alloc_t *dalloc = NULL;
+    if (is_build) {
+        return 0;
+    }
+
+    if (!runtime)
+        return 0;
+
+    dalloc = get_interp_dom_memdom(op);
+    if (dalloc && dalloc->memdom_id > 0) {
+        pthread_mutex_lock(&security_ctx_mutex);
+        memdom_free(op);
+        if (dalloc->has_space == false) {
+            dalloc->has_space = true;
+        }
+        pthread_mutex_unlock(&security_ctx_mutex);
+        rlog("[%s] Freed %p\n", __func__, op);
+        return 1;
+    }
+    return 0;
+}
+
+/** Wrapper around memdom_query_id. Returns 1 if the
+ * given pointer is in the interpreter_dom, 0 otherwise.
+ */
+int pyr_is_critical_state(void *op) {
+    pyr_interp_dom_alloc_t *dalloc = NULL;
+
+    if (is_build)
+        return 0;
+
+    if (!runtime)
+        return 0;
+
+    dalloc = get_interp_dom_memdom(op);
+    if (!dalloc)
+      return 0;
+
+    return (dalloc->memdom_id > 0);
+}
+
+/** Grants the main thread write access to the interpreter domain.
+ */
+void pyr_grant_critical_state_write(void *op) {
+    int i = 0;
+    pyr_interp_dom_alloc_t *dalloc = NULL;
+
+    if (is_build)
+      return;
+
+    // suspend if the stack tracer thread is running
+    pyr_is_inspecting();
+
+    // let's skip adding write privs if our runtime
+    // doesn't have a domain or our domain is invalid
+    if (!runtime) {
+        return;
+    }
+
+    // if the caller has given us an insecure object, exit
+    if (op) {
+      dalloc = get_interp_dom_memdom(op);
+      rlog("[%s] grant access to obj %p?\n", __func__, op);
+      if (!dalloc || dalloc->memdom_id <= 0)
+	return;
+    }
+    
+    pthread_mutex_lock(&security_ctx_mutex);
+    // if the caller has given us an existing secure object to
+    // modify, we should just go ahead an grant that particular
+    // memdom the write access
+    if (op && !dalloc->writable) {
+      memdom_priv_add(dalloc->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
+      dalloc->writable = true;
+      rlog("[%s] Granted write access to obj in memdom %d\n", __func__, dalloc->memdom_id);
+      goto out;
+    }
+
+    rlog("[%s] Grants: %d\n", __func__, runtime->nested_grants);
+    
+    // slight optimization: if we've already granted access
+    // let's avoid another downcall to change the memdom privileges
+    // and simply keep track of how many times we've granted access
+    if (runtime->nested_grants == 0) {
+      dalloc = runtime->interp_doms;
+      while(dalloc) {
+	if (dalloc->has_space) {
+	  memdom_priv_add(dalloc->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
+	  dalloc->writable = true;
+	  rlog("[%s] Granted write access to memdom %d\n", __func__, dalloc->memdom_id);
+	}
+	dalloc = dalloc->next;
+      }
+    }
+ out:
+    runtime->nested_grants++;
+    pthread_mutex_unlock(&security_ctx_mutex);
+}
+
+/** Revokes the main thread's write privileges to the interpreter domain.
+ */
+void pyr_revoke_critical_state_write(void *op) {
+    int i = 0;
+    pyr_interp_dom_alloc_t *dalloc = NULL;
+    if (is_build)
+      return;
+
+    // suspend if the stack tracer thread is running
+    pyr_is_inspecting();
+
+    // let's skip adding write privs if our runtime
+    // doesn't have a domain or our domain is invalid
+    if (!runtime) {
+        return;
+    }
+
+    // if the caller has given us an insecure object, exit
+    if (op) {
+      dalloc = get_interp_dom_memdom(op);
+      rlog("[%s] revoke access from obj %p?\n", __func__, op);
+      if (!dalloc || dalloc->memdom_id <= 0)
+	return;
+    }
+
+    pthread_mutex_lock(&security_ctx_mutex);
+    rlog("[%s] Number of grants: %d\n", __func__, runtime->nested_grants);
+    runtime->nested_grants--;
+    if (op && runtime->nested_grants == 0) {
+      memdom_priv_del(dalloc->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
+      dalloc->writable = false;
+      rlog("[%s] Revoked write access for obj in domain %d\n", __func__, dalloc->memdom_id);
+      goto out;
+    }
+    
+    // same optimization as above
+    if (runtime->nested_grants == 0) {
+      dalloc = runtime->interp_doms;
+      while(dalloc) {
+	if (dalloc->writable) {
+	  memdom_priv_del(dalloc->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
+	  dalloc->writable = false;
+	  rlog("[%s] Revoked write access to domain %d\n", __func__, dalloc->memdom_id);
+	}
+	dalloc = dalloc->next;
+      }
+    }
+ out:
+    pthread_mutex_unlock(&security_ctx_mutex);
+}
+
+/** Starts an SMV thread that has access to the MAIN_THREAD memdom.
+ * I.e. this is a wrapper for smvthread_create that is supposed to be used
+ * in the language runtime as a replacement for all pthread_create calls.
+ * This is needed because SMV doesn't allow you to spawn other smvthreads
+ * to run in the MAIN_THREAD smv.
+ */
+int pyr_thread_create(pthread_t* tid, const pthread_attr_t *attr,
+                      void*(fn)(void*), void* args) {
+    int ret = 0;
+    /*
+#ifdef PYR_INTERCEPT_PTHREAD_CREATE
+#undef pthread_create
+#endif
+
+    // suspend if the stack tracer thread is running
+    pyr_is_inspecting();
+
+    ret = smvthread_create_attr(pyr_smv_id, tid, attr, fn, args);
+#ifdef PYR_INTERCEPT_PTHREAD_CREATE
+#define pthread_create(tid, attr, fn, args) pyr_thread_create(tid, attr, fn, args)
+#endif
+    */
+    printf("[%s] Created new Pyronia thread to run in SMV %d\n", __func__, pyr_smv_id);
+    return ret;
+}
+
+/** Loads the given native library into its own memory domain.
+ */
+int pyr_load_native_lib_isolated(const char *lib) {
+    // FIXME
+    return 0;
+}
+
+/** Runs the given function belonging to the given library in
+ * in an isolated compartment (i.e. SMV).
+ */
+int pyr_run_native_func_isolated(const char *lib, void *(*func)(void)) {
+    // FIXME
+    return 0;
+}
+
+/** Starts the SI listener and dispatch thread.
+ */
+void pyr_callstack_req_listen() {
+    pthread_attr_t attr;
+    int i = 0;
+
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+    si_smv_id = smv_create();
+    if (si_smv_id == -1) {
+      printf("[%s] Could not create and SMV for the SI thread\n", __func__);
+      return;
+    }
+
+    // we trust this thread, but also, we need this thread to be able
+    // to access the functions
+    smv_join_domain(MAIN_THREAD, si_smv_id);
+    memdom_priv_add(MAIN_THREAD, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);
+    pyr_interp_dom_alloc_t *dalloc = runtime->interp_doms;
+    while(dalloc) {
+      smv_join_domain(dalloc->memdom_id, si_smv_id);
+      memdom_priv_add(dalloc->memdom_id, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);
+      dalloc = dalloc->next;
+    }
+
+    smvthread_create_attr(si_smv_id, &recv_th, &attr, pyr_recv_from_kernel, NULL);
+}
+
+int pyr_is_interpreter_build() {
+  return is_build;
 }
 
 /* Do all necessary teardown actions. */
 void pyr_exit() {
-  printf("[%s] Exiting Pyronia runtime\n", __func__);
+    if (is_build) {
+      return;
+    }
 
-  if (si_sock)
-    nl_socket_free(si_sock);
+    // suspend if the stack tracer thread is running
+    pyr_is_inspecting();
+
+    rlog("[%s] Exiting Pyronia runtime\n", __func__);
+    pthread_cancel(recv_th);
+    pyr_teardown_si_comm();
+    pyr_grant_critical_state_write((void *)runtime->main_path);
+    if (runtime->main_path)
+      pyr_free_critical_state(runtime->main_path);
+    pyr_security_context_free(&runtime);
 }
+
+/** Wrapper around the runtime callstack collection callback
+ * to be called by the si_comm component in handle_callstack_request.
+ */
+pyr_cg_node_t *pyr_collect_runtime_callstack() {
+    pyr_cg_node_t *cg = NULL;
+    runtime->interpreter_lock_acquire_cb();
+    cg = runtime->collect_callstack_cb();
+    runtime->interpreter_lock_release_cb();
+    rlog("[%s] Done collecting callstack\n", __func__);
+    return cg;
+}
+
+/* CALLGRAPH ALLOCATION AND FREE */
+/* These mirror the callgraph allocation and free functions.
+ * Until we register a new syscall, we need to be careful
+ * to keep them in sync. */
 
 // Allocate a new callgraph node
 int pyr_new_cg_node(pyr_cg_node_t **cg_root, const char* lib,
                         enum pyr_data_types data_type,
                         pyr_cg_node_t *child) {
 
-    pyr_cg_node_t *n = malloc(sizeof(pyr_cg_node_t));
+    pyr_cg_node_t *n = pyr_alloc_critical_runtime_state(sizeof(pyr_cg_node_t));
 
     if (n == NULL) {
         goto fail;
     }
 
-    n->lib = malloc(strlen(lib)+1);
-    if (!n->lib)
+    if (set_str(lib, &n->lib))
       goto fail;
-    memset(n->lib, 0, strlen(lib)+1);
-    memcpy(n->lib, lib, strlen(lib));
     n->data_type = data_type;
     n->child = child;
 
     *cg_root = n;
     return 0;
  fail:
-    if (n)
-        free(n);
+    pyr_free_critical_state(n);
     return -1;
 }
 
@@ -319,13 +544,12 @@ static void free_node(pyr_cg_node_t **node) {
       return;
     }
 
-    if (n->child == NULL) {
-        free(n->lib);
-        free(n);
+    if (n->child != NULL) {
+      free_node(&n->child);
     }
-    else {
-        free_node(&(n->child));
-    }
+
+    pyr_free_critical_state(n->lib);
+    pyr_free_critical_state(n);
     *node = NULL;
 }
 
