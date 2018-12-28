@@ -11,6 +11,8 @@
 
 #define INT32_STR_SIZE 12
 
+int si_memdom;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
