@@ -131,9 +131,10 @@ int pyr_security_context_alloc(struct pyr_security_context **ctxp,
     c = malloc(sizeof(struct pyr_security_context));
     if (!c)
       goto fail;
-    
-    c->interp_doms = malloc(sizeof(pyr_interp_dom_alloc_t));
-    if (!c->interp_doms)
+
+    memset(c->interp_doms, 0, MAX_NUM_INTERP_DOMS*sizeof(pyr_interp_dom_alloc_t));
+    c->interp_doms[0] = malloc(sizeof(pyr_interp_dom_alloc_t));
+    if (!c->interp_doms[0])
       goto fail;
     if ((interp_memdom = memdom_create()) == -1) {
       printf("[%s] Could not create interpreter dom # %d\n", __func__, 1);
@@ -144,12 +145,12 @@ int pyr_security_context_alloc(struct pyr_security_context **ctxp,
     smv_join_domain(interp_memdom, MAIN_THREAD);
     memdom_priv_add(interp_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
     
-    c->interp_doms->memdom_id = interp_memdom;
-    c->interp_doms->start = NULL;
-    c->interp_doms->end = NULL;
-    c->interp_doms->has_space = true;
-    c->interp_doms->writable = true;
-    c->interp_doms->next = NULL;
+    c->interp_doms[0]->memdom_id = interp_memdom;
+    c->interp_doms[0]->start = NULL;
+    c->interp_doms[0]->end = NULL;
+    c->interp_doms[0]->has_space = true;
+    c->interp_doms[0]->writable = true;
+    c->interp_doms[0]->next = NULL;
 
     c->main_path = NULL;
     // this ensures that we really do revoke write access at the end of pyr_init
@@ -189,22 +190,26 @@ int pyr_find_native_lib_memdom(pyr_native_ctx_t *start, const char *lib) {
     return -1;
 }
 
-static void free_interp_doms(pyr_interp_dom_alloc_t **domp) {
-    pyr_interp_dom_alloc_t *d = *domp;
+static void free_interp_doms(struct pyr_security_context *ctx) {
     int memdom_id = -1;
+    pyr_interp_dom_alloc_t *d = NULL;
+    int i = 0;
 
-    if (!d)
+    if (!ctx)
         return;
 
-    if (d->next != NULL)
-        free_interp_doms(&d->next);
+    for (i = 0; i < MAX_NUM_INTERP_DOMS; i++) {
+        d = ctx->interp_doms[i];
+        if (d) {
+            printf("[%s] Interpreter allocation meta for memdom %d\n", __func__, d->memdom_id);
+            if (d->start)
+                memdom_free(d->start);
+            memdom_kill(d->memdom_id);
+            free(d);
+        }
+        ctx->interp_doms[i] = NULL;
+    }
 
-    printf("[%s] Interpreter allocation meta for memdom %d\n", __func__, d->memdom_id);
-
-    if (d->start)
-      memdom_free(d->start);
-    memdom_kill(d->memdom_id);
-    *domp = NULL;
 }
 
 void pyr_security_context_free(struct pyr_security_context **ctxp) {
@@ -218,7 +223,7 @@ void pyr_security_context_free(struct pyr_security_context **ctxp) {
 
     //pyr_native_lib_context_free(&c->native_libs);
 
-    free_interp_doms(&c->interp_doms);
+    free_interp_doms(c);
     free(c);
     *ctxp = NULL;
 }

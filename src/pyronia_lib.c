@@ -27,8 +27,7 @@ static int pyr_smv_id = -1;
 static int si_smv_id = -1;
 static int is_build = 0;
 static pthread_t recv_th;
-static int num_interp_memdoms_in_use = 1;
-static pyr_interp_dom_alloc_t *allocs_tail = NULL;
+static int interp_memdom_pool_size = 1;
 
 /** Do all the necessary setup for a language runtime to use
  * the Pyronia extensions: open the stack inspection communication
@@ -38,8 +37,8 @@ static pyr_interp_dom_alloc_t *allocs_tail = NULL;
 int pyr_init(const char *main_mod_path,
              const char *lib_policy_file,
              pyr_cg_node_t *(*collect_callstack_cb)(void),
-	     void (*interpreter_lock_acquire_cb)(void),
-	     void (*interpreter_lock_release_cb)(void)) {
+             void (*interpreter_lock_acquire_cb)(void),
+             void (*interpreter_lock_release_cb)(void)) {
     int err = 0, i = 0;
     char *policy = NULL;
     pthread_mutexattr_t attr;
@@ -59,7 +58,7 @@ int pyr_init(const char *main_mod_path,
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
     pthread_mutex_init(&security_ctx_mutex, &attr);
     pthread_cond_init(&si_cond_var, NULL);
-    
+
     /* Register with the memdom subsystem */
     // We don't want the main thread's memdom to be
     // globally accessible, so init with 0.
@@ -80,14 +79,14 @@ int pyr_init(const char *main_mod_path,
     smv_join_domain(MAIN_THREAD, pyr_smv_id);
     memdom_priv_add(MAIN_THREAD, pyr_smv_id, MEMDOM_READ | MEMDOM_WRITE);
     */
-    
+
     /* Initialize the runtime's security context */
     err = pyr_security_context_alloc(&runtime, collect_callstack_cb,
-				     interpreter_lock_acquire_cb,
-				     interpreter_lock_release_cb);
+                                     interpreter_lock_acquire_cb,
+                                     interpreter_lock_release_cb);
     if (!err) {
-      allocs_tail = runtime->interp_doms;
-      err = set_str(main_mod_path, &runtime->main_path);
+        runtime->interp_doms[0]->has_space = true;
+        err = set_str(main_mod_path, &runtime->main_path);
     }
     if (err) {
         printf("[%s] Runtime initialization failure\n", __func__);
@@ -110,7 +109,7 @@ int pyr_init(const char *main_mod_path,
     }
 
     //    PyEval_InitThreads(); // needed to enable stack inspector
-    
+
     pyr_callstack_req_listen();
     pyr_is_inspecting(); // we want to wait for the listener to be ready
  out:
@@ -127,27 +126,27 @@ static void new_interp_memdom() {
   int interp_memdom = -1;
   pyr_interp_dom_alloc_t *new_dom = NULL;
 
-  if (num_interp_memdoms_in_use+1 > MAX_NUM_INTERP_DOMS)
+  if (interp_memdom_pool_size+1 > MAX_NUM_INTERP_DOMS)
     return;
-  
-  new_dom = malloc(sizeof(pyr_interp_dom_alloc_t));
+
+  runtime->interp_doms[interp_memdom_pool_size] = new_dom = malloc(sizeof(pyr_interp_dom_alloc_t));
   if (!new_dom)
-    goto fail;
+      goto fail;
+
   interp_memdom = memdom_create();
   if(interp_memdom == -1) {
-    printf("[%s] Could not create interpreter dom # %d\n", __func__, num_interp_memdoms_in_use+1);
+    printf("[%s] Could not create interpreter dom # %d\n", __func__, interp_memdom_pool_size+1);
     goto fail;
   }
   // don't forget to add the main thread to this memdom
   smv_join_domain(interp_memdom, MAIN_THREAD);
   memdom_priv_add(interp_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
-  
+
   new_dom->memdom_id = interp_memdom;
   new_dom->start = NULL;
   new_dom->end = NULL;
   new_dom->has_space = true;
   new_dom->writable = true;
-  new_dom->next = NULL;
 
   // for big profiles, we're going to be calling this functions before
   // we even launch the SI thread
@@ -155,16 +154,12 @@ static void new_interp_memdom() {
     smv_join_domain(new_dom->memdom_id, si_smv_id);
     memdom_priv_add(new_dom->memdom_id, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);
   }
-  
-  // insert at tail
-  allocs_tail->next = new_dom;
-  allocs_tail = new_dom;
-  
-  num_interp_memdoms_in_use++;
+
+  interp_memdom_pool_size++;
   return;
  fail:
-  if (new_dom)
-    free(new_dom);
+  if (runtime->interp_doms[interp_memdom_pool_size])
+    free(runtime->interp_doms[interp_memdom_pool_size]);
 }
 
 /** Wrapper around memdom_alloc in the interpreter domain.
@@ -183,12 +178,12 @@ void *pyr_alloc_critical_runtime_state(size_t size) {
       rlog("[%s] Requested size is too large for interpreter dom.\n", __func__);
       return malloc(size);
     }
-    
+
     pthread_mutex_lock(&security_ctx_mutex);
-    dalloc = runtime->interp_doms;
-    while(dalloc) {
+    for (i = 0; i < interp_memdom_pool_size; i++) {
+        dalloc = runtime->interp_doms[i];
         if (dalloc->has_space &&
-	    memdom_get_free_bytes(dalloc->memdom_id) >= size) {
+            memdom_get_free_bytes(dalloc->memdom_id) >= size) {
             new_block = memdom_alloc(dalloc->memdom_id, size);
 
             if (new_block) {
@@ -198,34 +193,31 @@ void *pyr_alloc_critical_runtime_state(size_t size) {
                     dalloc->start = new_block;
                     dalloc->end = new_block+MEMDOM_HEAP_SIZE;
                 }
-	        rlog("[%s] Allocated %lu bytes in memdom %d\n", __func__, size, dalloc->memdom_id);
+                rlog("[%s] Allocated %lu bytes in memdom %d\n", __func__, size, dalloc->memdom_id);
                 break;
-	    }
+            }
             else {
-	      dalloc->has_space = false;
-	      rlog("[%s] Memdom allocator could not find a suitable block in memdom %d. Current number of active memdoms: %d\n", __func__, dalloc->memdom_id, num_interp_memdoms_in_use);
-	      if (dalloc->next == NULL) {
-		//num_interp_memdoms_in_use++;
-		new_interp_memdom();
-	      }
+              dalloc->has_space = false;
+              rlog("[%s] Memdom allocator could not find a suitable block in memdom %d. Current number of active memdoms: %d\n", __func__, dalloc->memdom_id, interp_memdom_pool_size);
+              if (dalloc->next == NULL) {
+                new_interp_memdom();
+              }
             }
         }
-	else {
-	  if (dalloc->has_space)
-	    dalloc->has_space = false;
-	  if (num_interp_memdoms_in_use == dalloc->memdom_id) {
-	    rlog("[%s] Not enough space in any active memdoms. Current number of active memdoms: %d\n", __func__, num_interp_memdoms_in_use);
-	    //num_interp_memdoms_in_use++;
-	    new_interp_memdom();
-	  }
-	}
+        else {
+          if (dalloc->has_space)
+            dalloc->has_space = false;
+          if (interp_memdom_pool_size == dalloc->memdom_id) {
+            rlog("[%s] Not enough space in any active memdoms. Current number of active memdoms: %d\n", __func__, interp_memdom_pool_size);
+            new_interp_memdom();
+          }
+        }
 
-	// let's make sure we never have more than MAX_NUM_INTERP_DOMS active
-	if (num_interp_memdoms_in_use > MAX_NUM_INTERP_DOMS) {
-	  num_interp_memdoms_in_use = MAX_NUM_INTERP_DOMS;
-	  break;
-	}
-	dalloc = dalloc->next;
+        // let's make sure we never have more than MAX_NUM_INTERP_DOMS active
+        if (interp_memdom_pool_size > MAX_NUM_INTERP_DOMS) {
+          interp_memdom_pool_size = MAX_NUM_INTERP_DOMS;
+          break;
+        }
     }
     pthread_mutex_unlock(&security_ctx_mutex);
     return new_block;
@@ -233,16 +225,17 @@ void *pyr_alloc_critical_runtime_state(size_t size) {
 
 static pyr_interp_dom_alloc_t *get_interp_dom_memdom(void *op) {
     int id = 0;
+    int i = 0;
     pyr_interp_dom_alloc_t *dalloc = NULL;
-    
+
     pthread_mutex_lock(&security_ctx_mutex);
-    dalloc = runtime->interp_doms;
-    while(dalloc) {
+    for (i = 0; i < interp_memdom_pool_size; i++) {
+        dalloc = runtime->interp_doms[i];
         if (op >= dalloc->start &&
             op < dalloc->end) {
             goto out;
         }
-	dalloc = dalloc->next;
+        dalloc = dalloc->next;
     }
  out:
     pthread_mutex_unlock(&security_ctx_mutex);
@@ -253,7 +246,6 @@ static pyr_interp_dom_alloc_t *get_interp_dom_memdom(void *op) {
  * Returns 1 if the state was freed, 0 otherwise.
  */
 int pyr_free_critical_state(void *op) {
-    int obj_memdom = -1;
     pyr_interp_dom_alloc_t *dalloc = NULL;
     if (is_build) {
         return 0;
@@ -318,9 +310,9 @@ void pyr_grant_critical_state_write(void *op) {
       dalloc = get_interp_dom_memdom(op);
       rlog("[%s] grant access to obj %p?\n", __func__, op);
       if (!dalloc || dalloc->memdom_id <= 0)
-	return;
+        return;
     }
-    
+
     pthread_mutex_lock(&security_ctx_mutex);
     // if the caller has given us an existing secure object to
     // modify, we should just go ahead an grant that particular
@@ -333,20 +325,19 @@ void pyr_grant_critical_state_write(void *op) {
     }
 
     rlog("[%s] Grants: %d\n", __func__, runtime->nested_grants);
-    
+
     // slight optimization: if we've already granted access
     // let's avoid another downcall to change the memdom privileges
     // and simply keep track of how many times we've granted access
     if (runtime->nested_grants == 0) {
-      dalloc = runtime->interp_doms;
-      while(dalloc) {
-	if (dalloc->has_space) {
-	  memdom_priv_add(dalloc->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
-	  dalloc->writable = true;
-	  rlog("[%s] Granted write access to memdom %d\n", __func__, dalloc->memdom_id);
-	}
-	dalloc = dalloc->next;
-      }
+        for (i = 0; i < interp_memdom_pool_size; i++){
+            dalloc = runtime->interp_doms[i];
+            if (dalloc->has_space) {
+                memdom_priv_add(dalloc->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
+                dalloc->writable = true;
+                rlog("[%s] Granted write access to memdom %d\n", __func__, dalloc->memdom_id);
+            }
+        }
     }
  out:
     runtime->nested_grants++;
@@ -375,7 +366,7 @@ void pyr_revoke_critical_state_write(void *op) {
       dalloc = get_interp_dom_memdom(op);
       rlog("[%s] revoke access from obj %p?\n", __func__, op);
       if (!dalloc || dalloc->memdom_id <= 0)
-	return;
+        return;
     }
 
     pthread_mutex_lock(&security_ctx_mutex);
@@ -387,18 +378,17 @@ void pyr_revoke_critical_state_write(void *op) {
       rlog("[%s] Revoked write access for obj in domain %d\n", __func__, dalloc->memdom_id);
       goto out;
     }
-    
+
     // same optimization as above
     if (runtime->nested_grants == 0) {
-      dalloc = runtime->interp_doms;
-      while(dalloc) {
-	if (dalloc->writable) {
-	  memdom_priv_del(dalloc->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
-	  dalloc->writable = false;
-	  rlog("[%s] Revoked write access to domain %d\n", __func__, dalloc->memdom_id);
-	}
-	dalloc = dalloc->next;
-      }
+        for (i = 0; i < interp_memdom_pool_size; i++) {
+            dalloc = runtime->interp_doms[i];
+            if (dalloc->writable) {
+                memdom_priv_del(dalloc->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
+                dalloc->writable = false;
+                rlog("[%s] Revoked write access to domain %d\n", __func__, dalloc->memdom_id);
+            }
+        }
     }
  out:
     pthread_mutex_unlock(&security_ctx_mutex);
@@ -464,11 +454,10 @@ void pyr_callstack_req_listen() {
     // to access the functions
     smv_join_domain(MAIN_THREAD, si_smv_id);
     memdom_priv_add(MAIN_THREAD, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);
-    pyr_interp_dom_alloc_t *dalloc = runtime->interp_doms;
-    while(dalloc) {
-      smv_join_domain(dalloc->memdom_id, si_smv_id);
-      memdom_priv_add(dalloc->memdom_id, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);
-      dalloc = dalloc->next;
+    for (i = 0; i < interp_memdom_pool_size; i++) {
+        pyr_interp_dom_alloc_t *dalloc = runtime->interp_doms[i];
+        smv_join_domain(dalloc->memdom_id, si_smv_id);
+        memdom_priv_add(dalloc->memdom_id, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);
     }
 
     smvthread_create_attr(si_smv_id, &recv_th, &attr, pyr_recv_from_kernel, NULL);

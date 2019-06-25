@@ -10,7 +10,7 @@
 
 #include <stdbool.h>
 
-#define MAX_NUM_INTERP_DOMS 200
+#define MAX_NUM_INTERP_DOMS 150
 
 struct pyr_native_lib_context {
     char *library_name; // runtimes also identify libraries by string name
@@ -41,7 +41,7 @@ typedef struct pyr_cg_node pyr_cg_node_t;
 struct pyr_security_context {
     char *main_path;
     pyr_native_ctx_t *native_libs;
-    pyr_interp_dom_alloc_t *interp_doms;
+    pyr_interp_dom_alloc_t *interp_doms[MAX_NUM_INTERP_DOMS];
     /* The runtime may grant write access to the critical state
      * in a function that calls another function that grants access
      * itself. To make sure we don't revoke access to the outer
