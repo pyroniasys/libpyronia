@@ -34,6 +34,8 @@
 #define malloc(sz) memdom_alloc(memdom_private_id(), sz)
 #endif
 
+//#define PYR_MEMDOM_BENCH 1
+
 /* Every allocated chunk of memory has this block header to record the required
  * metadata for the allocator to free memory
  */
@@ -58,13 +60,17 @@ struct memdom_metadata_struct {
   struct alloc_metadata *allocs;
   unsigned long cur_alloc;
   unsigned long peak_alloc;
+#ifdef PYR_MEMDOM_BENCH
+  unsigned long metadata_cur;
+  unsigned long metadata_peak;
+#endif
   pthread_mutex_t mlock;  // protects this memdom in sn SMP environment
 };
 extern struct memdom_metadata_struct *memdom[MAX_MEMDOM];
 
 #ifdef __cplusplus
 extern "C" {
-  #endif
+#endif
 
   /* Create memory domain and return it to user */
   int memdom_create(void);
@@ -105,7 +111,11 @@ extern "C" {
     /* Get the number of free bytes in a memdom */
     unsigned long memdom_get_free_bytes(int memdom_id);
 
-  #ifdef __cplusplus
+#ifdef PYR_MEMDOM_BENCH
+    unsigned long memdom_get_peak_metadata_alloc(int memdom_id);
+#endif
+
+#ifdef __cplusplus
 }
 #endif
 

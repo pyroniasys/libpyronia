@@ -479,6 +479,9 @@ void pyr_exit() {
     rlog("[%s] Exiting Pyronia runtime\n", __func__);
     pthread_cancel(recv_th);
     pyr_teardown_si_comm();
+#ifdef PYR_MEMDOM_BENCH
+    printf("%d\n", interp_memdom_pool_size);
+#endif
     pyr_grant_critical_state_write((void *)runtime->main_path);
     if (runtime->main_path)
       pyr_free_critical_state(runtime->main_path);
