@@ -132,7 +132,11 @@ int pyr_security_context_alloc(struct pyr_security_context **ctxp,
     if (!c)
       goto fail;
 
-    memset(c->interp_doms, 0, MAX_NUM_INTERP_DOMS*sizeof(pyr_interp_dom_alloc_t));
+    // make sure everything's zerod out when we start
+    for (i = 0; i < MAX_NUM_INTERP_DOMS; i++) {
+        c->interp_doms[i] = NULL;
+    }
+
     c->interp_doms[0] = malloc(sizeof(pyr_interp_dom_alloc_t));
     if (!c->interp_doms[0])
       goto fail;
