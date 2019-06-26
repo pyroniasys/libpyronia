@@ -233,11 +233,9 @@ static pyr_interp_dom_alloc_t *get_interp_dom_memdom(void *op) {
         dalloc = runtime->interp_doms[i];
         if (op >= dalloc->start &&
             op < dalloc->end) {
-            goto out;
+            break;
         }
-        dalloc = dalloc->next;
     }
- out:
     pthread_mutex_unlock(&security_ctx_mutex);
     return dalloc;
 }

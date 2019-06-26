@@ -154,7 +154,6 @@ int pyr_security_context_alloc(struct pyr_security_context **ctxp,
     c->interp_doms[0]->end = NULL;
     c->interp_doms[0]->has_space = true;
     c->interp_doms[0]->writable = true;
-    c->interp_doms[0]->next = NULL;
 
     c->main_path = NULL;
     // this ensures that we really do revoke write access at the end of pyr_init

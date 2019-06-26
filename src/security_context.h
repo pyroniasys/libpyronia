@@ -27,7 +27,6 @@ struct pyr_interp_dom_alloc {
     void *end;
     bool has_space;
     bool writable;
-    struct pyr_interp_dom_alloc *next;
 };
 
 typedef struct pyr_interp_dom_alloc pyr_interp_dom_alloc_t;
