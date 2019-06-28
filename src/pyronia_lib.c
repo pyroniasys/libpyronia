@@ -180,7 +180,7 @@ void *pyr_alloc_critical_runtime_state(size_t size) {
     }
 
     pthread_mutex_lock(&security_ctx_mutex);
-    for (i = 0; i < interp_memdom_pool_size; i++) {
+    for (i = 0; i < MAX_NUM_INTERP_DOMS; i++) {
         dalloc = runtime->interp_doms[i];
         if (dalloc->has_space &&
             memdom_get_free_bytes(dalloc->memdom_id) >= size) {
@@ -199,7 +199,7 @@ void *pyr_alloc_critical_runtime_state(size_t size) {
             else {
               dalloc->has_space = false;
               rlog("[%s] Memdom allocator could not find a suitable block in memdom %d. Current number of active memdoms: %d\n", __func__, dalloc->memdom_id, interp_memdom_pool_size);
-              if (dalloc->next == NULL) {
+              if (i+1 == interp_memdom_pool_size) {
                 new_interp_memdom();
               }
             }
@@ -207,7 +207,7 @@ void *pyr_alloc_critical_runtime_state(size_t size) {
         else {
           if (dalloc->has_space)
             dalloc->has_space = false;
-          if (interp_memdom_pool_size == dalloc->memdom_id) {
+          if (i+1 == interp_memdom_pool_size) {
             rlog("[%s] Not enough space in any active memdoms. Current number of active memdoms: %d\n", __func__, interp_memdom_pool_size);
             new_interp_memdom();
           }

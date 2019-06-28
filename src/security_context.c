@@ -204,7 +204,7 @@ static void free_interp_doms(struct pyr_security_context *ctx) {
     for (i = 0; i < MAX_NUM_INTERP_DOMS; i++) {
         d = ctx->interp_doms[i];
         if (d) {
-            printf("[%s] Interpreter allocation meta for memdom %d\n", __func__, d->memdom_id);
+            rlog("[%s] Interpreter allocation meta for memdom %d\n", __func__, d->memdom_id);
             if (d->start) {
                 memdom_priv_add(d->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
                 memdom_free(d->start);
