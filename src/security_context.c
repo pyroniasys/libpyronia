@@ -226,7 +226,7 @@ void pyr_security_context_free(struct pyr_security_context **ctxp) {
 
     //pyr_native_lib_context_free(&c->native_libs);
 
-    free_interp_doms(c);
+    free_avl_tree(&c->interp_doms);
     free(c);
     *ctxp = NULL;
 }

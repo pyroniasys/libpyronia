@@ -61,7 +61,7 @@ int memdom_kill(int memdom_id){
     return -1;
   }
 
-  printf("[%s] Memdom %d peak allocation: %lu bytes\n", __func__, memdom_id, memdom[memdom_id]->peak_alloc);
+  rlog("[%s] Memdom %d peak allocation: %lu bytes\n", __func__, memdom_id, memdom[memdom_id]->peak_alloc);
 
   /* Free mmap */
   if( memdom[memdom_id]->start ) {
@@ -591,7 +591,7 @@ void memdom_free(void* data){
   }
   else if (memdom_id == 0) {
     rlog("[%s] Freeing memory in main thread memdom\n", __func__);
-    free(data);
+    //free(data);
     return;
   }
 
