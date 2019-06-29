@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <pthread.h>
 #include <sys/syscall.h>
+#include <sys/mman.h>
 #include <linux/pyronia_mac.h>
 #include <smv_lib.h>
 #include <memdom_lib.h>
@@ -85,7 +86,6 @@ int pyr_init(const char *main_mod_path,
                                      interpreter_lock_acquire_cb,
                                      interpreter_lock_release_cb);
     if (!err) {
-        runtime->interp_doms[0]->has_space = true;
         err = set_str(main_mod_path, &runtime->main_path);
     }
     if (err) {
@@ -146,7 +146,7 @@ static pyr_interp_dom_alloc_t *new_interp_memdom() {
   new_dom->start = memdom_mmap(new_dom->memdom_id, 0, MEMDOM_HEAP_SIZE,
                                PROT_READ | PROT_WRITE,
                                MAP_PRIVATE | MAP_ANONYMOUS | MAP_MEMDOM, 0, 0);
-  if (new_dom->start == MAP_FAILED) {
+  if (new_dom->start == NULL) {
       goto fail;
   }
   new_dom->end = new_dom->start + MEMDOM_HEAP_SIZE;
@@ -161,10 +161,19 @@ static pyr_interp_dom_alloc_t *new_interp_memdom() {
   }
 
   interp_memdom_pool_size++;
+  rlog("[%s] new memdom %d\n", __func__, new_dom->memdom_id);
   return new_dom;
  fail:
   free_interp_dom_metadata(&new_dom);
   return NULL;
+}
+
+void print_avl(avl_node_t *n) {
+  if (n != NULL) {
+    printf("%d \n", n->memdom_metadata->memdom_id);
+    print_avl(n->left);
+    print_avl(n->right);
+  }
 }
 
 /** Wrapper around memdom_alloc in the interpreter domain.
@@ -210,7 +219,7 @@ void *pyr_alloc_critical_runtime_state(size_t size) {
         goto out;
     }
     runtime->interp_doms = insert_memdom_metadata(dalloc, runtime->interp_doms);
-
+    //print_avl(runtime->interp_doms);
  out:
     pthread_mutex_unlock(&security_ctx_mutex);
     return new_block;

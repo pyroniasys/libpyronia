@@ -103,6 +103,9 @@ int memdom_kill(int memdom_id){
   return rv;
 }
 
+// forward declaration
+void free_list_init(int memdom_id);
+
 /* mmap memory in memdom
  * Caller should hold memdom lock
  */
@@ -130,12 +133,21 @@ void *memdom_mmap(int memdom_id,
     perror("memdom_mmap: ");
     return NULL;
   }
+
+  /* Zero out the newly mapped memory block */
+  memset(base, 0, len);
+    
   memdom[memdom_id]->start = base;
   memdom[memdom_id]->total_size = len;
 
   rlog("Memdom ID %d mmaped at %p\n", memdom_id, base);
 
   rlog("[%s] memdom %d mmaped %lu bytes at %p\n", __func__, memdom_id, len, base);
+
+  /* Initialize free list */
+  if (memdom[memdom_id]->free_list_tail == NULL)
+    free_list_init(memdom_id);
+  
   return base;
 }
 
@@ -452,17 +464,9 @@ void *memdom_alloc(int memdom_id, unsigned long sz){
 
     memblock = (char*) memdom_mmap(memdom_id, 0, MEMDOM_HEAP_SIZE,
 				   PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_MEMDOM, 0, 0);
-    if( memblock == MAP_FAILED ) {
-      fprintf(stderr, "Failed to memdom_alloc using mmap for memdom %d\n", memdom_id);
-      memblock = NULL;
+
+    if (!memblock)
       goto out;
-    }
-
-    /* Zero out the newly mapped memory block */
-    memset(memblock, 0, MEMDOM_HEAP_SIZE);
-
-    /* Initialize free list */
-    free_list_init(memdom_id);
   }
 
   /* Round up size to multiple of cache line size: 64B */

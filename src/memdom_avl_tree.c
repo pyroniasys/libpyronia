@@ -16,14 +16,14 @@ void free_avl_tree(avl_node_t** root) {
     avl_node_t *rootp = *root;
 
     if (!rootp)
-        return;
+      return;
 
-    free_interp_dom_metadata(&rootp->memdom_metadata);
     if (rootp->left != NULL)
         free_avl_tree(&rootp->left);
     if (rootp->right != NULL)
         free_avl_tree(&rootp->right);
-
+    free_interp_dom_metadata(&rootp->memdom_metadata);
+    
     free(rootp);
     *root = NULL;
 }
@@ -149,7 +149,7 @@ static avl_node_t *balance_tree(avl_node_t *n) {
  * Performs any balancing, and returns the new root.
  */
 avl_node_t *insert_memdom_metadata(pyr_interp_dom_alloc_t *metadata, avl_node_t *n) {
-
+  
     if (n == NULL) {
         /* Create and return a one-node tree */
         n = malloc(sizeof(avl_node_t));
@@ -162,10 +162,10 @@ avl_node_t *insert_memdom_metadata(pyr_interp_dom_alloc_t *metadata, avl_node_t 
         n->left = n->right = NULL;
         return n;
     }
-    else if (metadata->end < n->memdom_metadata->start) {
+    else if (metadata->start <  n->memdom_metadata->start) {
         n->left = insert_memdom_metadata(metadata, n->left);
     }
-    else if(metadata->start > n->memdom_metadata->end) {
+    else if(metadata->start > n->memdom_metadata->start) {
         n->right = insert_memdom_metadata(metadata, n->right);
     }
     n->level = max(get_level(n->left), get_level(n->right)) + 1;

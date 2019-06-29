@@ -6,6 +6,7 @@
  */
 #include <stdlib.h>
 #include <errno.h>
+#include <sys/mman.h>
 #include <memdom_lib.h>
 
 #include "security_context.h"
@@ -148,14 +149,18 @@ int pyr_security_context_alloc(struct pyr_security_context **ctxp,
     interp_dom_meta->start = memdom_mmap(interp_dom_meta->memdom_id, 0, MEMDOM_HEAP_SIZE,
                                          PROT_READ | PROT_WRITE,
                                          MAP_PRIVATE | MAP_ANONYMOUS | MAP_MEMDOM, 0, 0);
-    if (interp_dom_meta->start == MAP_FAILED)
+    if (interp_dom_meta->start == MAP_FAILED) {
+      printf("[%s] could not map memdom area\n", __func__);
         goto fail;
+    }
     interp_dom_meta->end = interp_dom_meta->start + MEMDOM_HEAP_SIZE;
     interp_dom_meta->has_space = true;
     interp_dom_meta->writable = true;
     c->interp_doms = insert_memdom_metadata(interp_dom_meta, NULL);
-    if (!c->interp_doms)
+    if (!c->interp_doms) {
+      printf("[%s] could not insert first metadata\n", __func__);
         goto fail;
+    }
 
     c->main_path = NULL;
     // this ensures that we really do revoke write access at the end of pyr_init
@@ -203,7 +208,7 @@ void free_interp_dom_metadata(pyr_interp_dom_alloc_t **dom) {
     if (!d)
         return;
 
-    printf("[%s] Interpreter allocation meta for memdom %d\n", __func__, d->memdom_id);
+    rlog("[%s] memdom %d\n", __func__, d->memdom_id);
 #ifdef PYR_MEMDOM_BENCH
     printf("%lu\n", memdom_get_peak_metadata_alloc(d->memdom_id));
 #endif

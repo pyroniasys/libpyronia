@@ -28,6 +28,7 @@ static inline int set_str(const char *src, char **dest) {
   str = pyr_alloc_critical_runtime_state(strlen(src)+1);
   if (!str) {
     err = -1;
+    printf("[%s] Could not allocate string %s in interp dom\n", __func__, src);
     goto out;
   }
 
