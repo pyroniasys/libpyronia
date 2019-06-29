@@ -44,3 +44,10 @@ libapparmor/libraries/libapparmor/testsuite/.libs/
 libapparmor/libraries/libapparmor/testsuite/test_multi.multi
 libapparmor/parser/apparmor_parser
 libapparmor/parser/libapparmor_re/libapparmor_re.a
+
+src/Makefile
+libsmv/Makefile
+apps/plant_watering/df401a2b29-private.pem.key
+apps/plant_watering/df401a2b29-certificate.pem.cert.txt
+apps/alexa/creds.py
+apps/twitterPhoto/api_keys.py

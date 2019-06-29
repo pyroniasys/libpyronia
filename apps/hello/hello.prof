@@ -1,0 +1,3 @@
+/home/pyronia/libpyronia/apps/hello/hello.py r,
+/home/pyronia/libpyronia/apps/hello/hello.py.data rw,
+/home/pyronia/cpython/benchmarks/hello/* rw,
