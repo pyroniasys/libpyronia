@@ -132,28 +132,30 @@ int pyr_security_context_alloc(struct pyr_security_context **ctxp,
     if (!c)
       goto fail;
 
-    // make sure everything's zerod out when we start
-    for (i = 0; i < MAX_NUM_INTERP_DOMS; i++) {
-        c->interp_doms[i] = NULL;
-    }
-
-    c->interp_doms[0] = malloc(sizeof(pyr_interp_dom_alloc_t));
-    if (!c->interp_doms[0])
+    pyr_interp_dom_alloc_t *interp_dom_meta = malloc(sizeof(pyr_interp_dom_alloc_t));
+    if (!interp_dom_meta)
       goto fail;
     if ((interp_memdom = memdom_create()) == -1) {
       printf("[%s] Could not create interpreter dom # %d\n", __func__, 1);
       goto fail;
     }
-    
+
     // don't forget to add the main thread to this memdom
     smv_join_domain(interp_memdom, MAIN_THREAD);
     memdom_priv_add(interp_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
-    
-    c->interp_doms[0]->memdom_id = interp_memdom;
-    c->interp_doms[0]->start = NULL;
-    c->interp_doms[0]->end = NULL;
-    c->interp_doms[0]->has_space = true;
-    c->interp_doms[0]->writable = true;
+
+    interp_dom_meta->memdom_id = interp_memdom;
+    interp_dom_meta->start = memdom_mmap(interp_dom_meta->memdom_id, 0, MEMDOM_HEAP_SIZE,
+                                         PROT_READ | PROT_WRITE,
+                                         MAP_PRIVATE | MAP_ANONYMOUS | MAP_MEMDOM, 0, 0);
+    if (interp_dom_meta->start == MAP_FAILED)
+        goto fail;
+    interp_dom_meta->end = interp_dom_meta->start + MEMDOM_HEAP_SIZE;
+    interp_dom_meta->has_space = true;
+    interp_dom_meta->writable = true;
+    c->interp_doms = insert_memdom_metadata(interp_dom_meta, NULL);
+    if (!c->interp_doms)
+        goto fail;
 
     c->main_path = NULL;
     // this ensures that we really do revoke write access at the end of pyr_init
@@ -171,7 +173,7 @@ int pyr_security_context_alloc(struct pyr_security_context **ctxp,
     // this list will be added to whenever a new non-builtin extenion
     // is loaded via dlopen
     c->native_libs = NULL;
-    
+
     *ctxp = c;
     return 0;
  fail:
@@ -193,32 +195,24 @@ int pyr_find_native_lib_memdom(pyr_native_ctx_t *start, const char *lib) {
     return -1;
 }
 
-static void free_interp_doms(struct pyr_security_context *ctx) {
+void free_interp_dom_metadata(pyr_interp_dom_alloc_t **dom) {
     int memdom_id = -1;
-    pyr_interp_dom_alloc_t *d = NULL;
+    pyr_interp_dom_alloc_t *d = *dom;
     int i = 0;
 
-    if (!ctx)
+    if (!d)
         return;
 
-    for (i = 0; i < MAX_NUM_INTERP_DOMS; i++) {
-        d = ctx->interp_doms[i];
-        if (d) {
-            printf("[%s] Interpreter allocation meta for memdom %d\n", __func__, d->memdom_id);
-            if (d->start) {
-                memdom_priv_add(d->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
-                memdom_free(d->start);
-            }
-            smv_leave_domain(d->memdom_id, MAIN_THREAD);
+    printf("[%s] Interpreter allocation meta for memdom %d\n", __func__, d->memdom_id);
 #ifdef PYR_MEMDOM_BENCH
-            printf("%lu\n", memdom_get_peak_metadata_alloc(d->memdom_id));
+    printf("%lu\n", memdom_get_peak_metadata_alloc(d->memdom_id));
 #endif
-            memdom_kill(d->memdom_id);
-            free(d);
-        }
-        ctx->interp_doms[i] = NULL;
+    if (d->start) {
+        memdom_priv_add(d->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
+        memdom_kill(d->memdom_id);
     }
-
+    free(d);
+    *dom = NULL;
 }
 
 void pyr_security_context_free(struct pyr_security_context **ctxp) {

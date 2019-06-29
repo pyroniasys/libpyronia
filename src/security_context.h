@@ -10,6 +10,8 @@
 
 #include <stdbool.h>
 
+#include "memdom_avl_tree.h"
+
 #define MAX_NUM_INTERP_DOMS 150
 
 struct pyr_native_lib_context {
@@ -40,7 +42,7 @@ typedef struct pyr_cg_node pyr_cg_node_t;
 struct pyr_security_context {
     char *main_path;
     pyr_native_ctx_t *native_libs;
-    pyr_interp_dom_alloc_t *interp_doms[MAX_NUM_INTERP_DOMS];
+    avl_node_t *interp_doms;
     /* The runtime may grant write access to the critical state
      * in a function that calls another function that grants access
      * itself. To make sure we don't revoke access to the outer
@@ -65,6 +67,7 @@ extern "C" {
 				   void (*interpreter_lock_acquire_cb)(void),
 				   void (*interpreter_lock_release_cb)(void));
     int pyr_find_native_lib_memdom(pyr_native_ctx_t *start, const char *lib);
+    void free_interp_dom_metadata(pyr_interp_dom_alloc_t **dom);
     void pyr_security_context_free(struct pyr_security_context **ctxp);
 
 #ifdef __cplusplus
