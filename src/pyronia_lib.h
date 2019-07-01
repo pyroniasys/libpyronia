@@ -28,6 +28,7 @@ extern "C" {
     void pyr_grant_critical_state_write(void *op);
     void pyr_revoke_critical_state_write(void *op);
     int pyr_free_critical_state(void *op);
+    int pyr_serialize_callstack(const char *func_fqn);
     int pyr_thread_create(pthread_t* tid, const pthread_attr_t *attr,
 			void*(fn)(void*), void* args);
     int pyr_load_native_lib_isolated(const char *lib);
