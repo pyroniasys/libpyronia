@@ -190,7 +190,7 @@ void *pyr_alloc_critical_runtime_state(size_t size) {
 
     if(size > MEMDOM_HEAP_SIZE) {
       rlog("[%s] Requested size is too large for interpreter dom.\n", __func__);
-      return malloc(size);
+      return (void *)1;
     }
 
     pthread_mutex_lock(&security_ctx_mutex);
@@ -514,10 +514,12 @@ void pyr_exit() {
  */
 pyr_cg_node_t *pyr_collect_runtime_callstack() {
     pyr_cg_node_t *cg = NULL;
+    pthread_mutex_lock(&security_ctx_mutex);
     runtime->interpreter_lock_acquire_cb();
     cg = runtime->collect_callstack_cb();
     runtime->interpreter_lock_release_cb();
     rlog("[%s] Done collecting callstack\n", __func__);
+    pthread_mutex_unlock(&security_ctx_mutex);
     return cg;
 }
 
