@@ -33,7 +33,7 @@ int pyr_serialize_callstack(const char *func_fqn) {
     // let's sanity check our lib name first (i.e. it should not
     // contain our delimiter character
     if (strchr(func_fqn, *delim)) {
-      printf("[%s] Oops, library name %s contains unacceptable characetr\n", __func__, cur_node->lib);
+      printf("[%s] Oops, library name %s contains unacceptable character\n", __func__, func_fqn);
       goto fail;
     }
 

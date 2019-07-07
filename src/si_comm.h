@@ -27,7 +27,7 @@ extern "C" {
     extern pyr_cg_node_t *pyr_collect_runtime_callstack(void);
     void pyr_teardown_si_comm(void);
     void *pyr_recv_from_kernel(void *args);
-    void pyr_callstack_req_listen(void);
+    void pyr_callstack_req_listen(bool is_child);
     void pyr_is_inspecting(void);
 
 #ifdef __cplusplus

@@ -30,6 +30,32 @@ static int is_build = 0;
 static pthread_t recv_th;
 static int interp_memdom_pool_size = 1;
 
+static inline int init_child_memdoms() {
+  int i = 0;
+  int err = -1;
+  
+  // use one extra for the SI thread's memdom
+  for (i = 0; i <= interp_memdom_pool_size; i++) {
+    err = memdom_register_new();
+    if (err == -1) {
+      printf("[%s] Could not register new memdom %d\n", __func__, i);
+      goto out;
+    }
+    else {
+      printf("[%s] Registered new memdom\n", __func__);
+      if (si_memdom != -1 && err == si_memdom)
+	continue;
+      smv_join_domain(err, MAIN_THREAD);
+      memdom_priv_add(err, MAIN_THREAD, MEMDOM_READ);
+      smv_join_domain(err, si_smv_id);
+      memdom_priv_add(err, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);
+    }
+  }
+  err = 0;
+ out:
+  return err;
+}
+
 /** Do all the necessary setup for a language runtime to use
  * the Pyronia extensions: open the stack inspection communication
  * channel and initialize the SMV backend.
@@ -39,14 +65,15 @@ int pyr_init(const char *main_mod_path,
              const char *lib_policy_file,
              pyr_cg_node_t *(*collect_callstack_cb)(void),
              void (*interpreter_lock_acquire_cb)(void),
-             void (*interpreter_lock_release_cb)(void)) {
+             void (*interpreter_lock_release_cb)(void),
+	     int is_child) {
     int err = 0, i = 0;
     char *policy = NULL;
     pthread_mutexattr_t attr;
 
     is_inspecting_stack = true;
-    rlog("[%s] Initializing pyronia for module %s\n", __func__, main_mod_path);
-
+    printf("[%s] Initializing pyronia for module %s in proc %d\n", __func__, main_mod_path, getpid());
+    
     // We make an exception for setup.py and the sysconfig modules
     // so we don't somehow clobber installs with Pyronia checks
     if (main_mod_path == NULL || !strcmp(main_mod_path, "../setup.py") ||
@@ -65,26 +92,32 @@ int pyr_init(const char *main_mod_path,
     // globally accessible, so init with 0.
     err = smv_main_init(0);
     if (err < 0) {
-        printf("[%s] Memdom subsystem registration failure\n", __func__);
-        goto out;
-    }
-
-    // create another SMV to be used by threads originally created by
-    // pthread_create. We won't allow mixing pthreads woth smvthreads
-    /*    pyr_smv_id = smv_create();
-    if (pyr_smv_id == -1) {
-      printf("[%s] Could not create an SMV for pyronia threads\n", __func__);
+      printf("[%s] Memdom subsystem registration failure\n", __func__);
       goto out;
     }
-    // We need this SMV to be able to access any Python functions
-    smv_join_domain(MAIN_THREAD, pyr_smv_id);
-    memdom_priv_add(MAIN_THREAD, pyr_smv_id, MEMDOM_READ | MEMDOM_WRITE);
-    */
 
+    /* If this is being called from a child proc, need to re-create
+       all memdoms in kernel. Nothing else since userspace and kernel-level
+       mappings still exist */
+    if (is_child) {
+      err = smv_create();
+      if (err != si_smv_id) {
+	printf("[%s] SI smv re-registration for child proc failed\n", __func__);
+	goto out;
+      }
+      smv_join_domain(MAIN_THREAD, si_smv_id);
+      memdom_priv_add(MAIN_THREAD, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);
+      err = init_child_memdoms();
+      if (err) {
+	printf("[%s] Memdom re-registration for child proc failed\n", __func__);
+	goto out;
+      }      
+    }
+    
     /* Initialize the runtime's security context */
     err = pyr_security_context_alloc(&runtime, collect_callstack_cb,
                                      interpreter_lock_acquire_cb,
-                                     interpreter_lock_release_cb);
+                                     interpreter_lock_release_cb, is_child);
     if (!err) {
         err = set_str(main_mod_path, &runtime->main_path);
     }
@@ -110,7 +143,20 @@ int pyr_init(const char *main_mod_path,
 
     //    PyEval_InitThreads(); // needed to enable stack inspector
 
-    pyr_callstack_req_listen();
+    pyr_callstack_req_listen(is_child);
+
+    // create another SMV to be used by threads originally created by
+    // pthread_create. We won't allow mixing pthreads woth smvthreads
+    /*pyr_smv_id = smv_create();
+    if (pyr_smv_id == -1) {
+      printf("[%s] Could not create an SMV for pyronia threads\n", __func__);
+      goto out;
+    }
+    // We need this SMV to be able to access any Python functions
+    smv_join_domain(MAIN_THREAD, pyr_smv_id);
+    memdom_priv_add(MAIN_THREAD, pyr_smv_id, MEMDOM_READ | MEMDOM_WRITE);
+    */
+    
     pyr_is_inspecting(); // we want to wait for the listener to be ready
  out:
     if (policy)
@@ -134,8 +180,8 @@ static pyr_interp_dom_alloc_t *new_interp_memdom() {
       goto fail;
 
   interp_memdom = memdom_create();
-  if(interp_memdom == -1) {
-    printf("[%s] Could not create interpreter dom # %d\n", __func__, interp_memdom_pool_size+1);
+  if(interp_memdom == 0 || interp_memdom == -1) {
+    printf("[%s] Bad new memdom id %d with %d pool size\n", __func__, interp_memdom, interp_memdom_pool_size);
     goto fail;
   }
   // don't forget to add the main thread to this memdom
@@ -413,7 +459,7 @@ void pyr_revoke_critical_state_write(void *op) {
 int pyr_thread_create(pthread_t* tid, const pthread_attr_t *attr,
                       void*(fn)(void*), void* args) {
     int ret = 0;
-    /*
+
 #ifdef PYR_INTERCEPT_PTHREAD_CREATE
 #undef pthread_create
 #endif
@@ -423,10 +469,12 @@ int pyr_thread_create(pthread_t* tid, const pthread_attr_t *attr,
 
     ret = smvthread_create_attr(pyr_smv_id, tid, attr, fn, args);
 #ifdef PYR_INTERCEPT_PTHREAD_CREATE
+    if (ret > 0)
+      ret = 0; // users of pthread_create expect status 0 on success
 #define pthread_create(tid, attr, fn, args) pyr_thread_create(tid, attr, fn, args)
 #endif
-    */
-    printf("[%s] Created new Pyronia thread to run in SMV %d\n", __func__, pyr_smv_id);
+
+    printf("[%s] Created new Pyronia thread to run in SMV %d\n", __func__, smvthread_get_id());
     return ret;
 }
 
@@ -447,29 +495,31 @@ static void avl_join_si(avl_node_t *n, int si_smv_id) {
 
 /** Starts the SI listener and dispatch thread.
  */
-void pyr_callstack_req_listen() {
+void pyr_callstack_req_listen(bool is_child) {
     pthread_attr_t attr;
     int i = 0;
-    si_memdom = -1;
 
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-    si_smv_id = smv_create();
-    if (si_smv_id == -1) {
-      printf("[%s] Could not create and SMV for the SI thread\n", __func__);
-      return;
-    }
-
-    // we trust this thread, but also, we need this thread to be able
-    // to access the functions
-    smv_join_domain(MAIN_THREAD, si_smv_id);
-    memdom_priv_add(MAIN_THREAD, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);
-    avl_join_si(runtime->interp_doms, si_smv_id);
-
-    si_memdom = memdom_create();
-    if (si_memdom == -1) {
-        printf("[%s] Could not create SI thread memdom\m", __func__);
+    if (!is_child) {
+      si_smv_id = smv_create();
+      if (si_smv_id == -1) {
+	printf("[%s] Could not create and SMV for the SI thread\n", __func__);
+	return;
+      }
+      
+      // we trust this thread, but also, we need this thread to be able
+      // to access the functions
+      smv_join_domain(MAIN_THREAD, si_smv_id);
+      memdom_priv_add(MAIN_THREAD, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);
+      avl_join_si(runtime->interp_doms, si_smv_id);
+      
+      si_memdom = -1;
+      si_memdom = memdom_create();
+      if (si_memdom == -1) {
+	printf("[%s] Could not create SI thread memdom\n", __func__);
+      }
     }
     smv_join_domain(si_memdom, si_smv_id);
     memdom_priv_add(si_memdom, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);

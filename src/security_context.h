@@ -12,7 +12,7 @@
 
 #include "memdom_avl_tree.h"
 
-#define MAX_NUM_INTERP_DOMS 150
+#define MAX_NUM_INTERP_DOMS 250
 
 struct pyr_native_lib_context {
     char *library_name; // runtimes also identify libraries by string name
@@ -65,7 +65,8 @@ extern "C" {
     int pyr_security_context_alloc(struct pyr_security_context **ctxp,
                                    pyr_cg_node_t *(*collect_callstack_cb)(void),
 				   void (*interpreter_lock_acquire_cb)(void),
-				   void (*interpreter_lock_release_cb)(void));
+				   void (*interpreter_lock_release_cb)(void),
+				   bool is_child);
     int pyr_find_native_lib_memdom(pyr_native_ctx_t *start, const char *lib);
     void free_interp_dom_metadata(pyr_interp_dom_alloc_t **dom);
     void pyr_security_context_free(struct pyr_security_context **ctxp);

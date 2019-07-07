@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <linux/pyronia_mac.h>
 
-//#define PYR_INTERCEPT_PTHREAD_CREATE
+#define PYR_INTERCEPT_PTHREAD_CREATE
 #ifdef PYR_INTERCEPT_PTHREAD_CREATE
 #define pthread_create(tid, attr, fn, args) pyr_thread_create(tid, attr, fn, args)
 #endif
@@ -22,7 +22,8 @@ extern "C" {
 		 const char *lib_policy_file,
                  pyr_cg_node_t *(*collect_callstack_cb)(void),
 		 void (*interpreter_lock_acquire_cb)(void),
-		 void (*interpreter_lock_release_cb)(void));
+		 void (*interpreter_lock_release_cb)(void),
+		 int is_child);
     void *pyr_alloc_critical_runtime_state(size_t size);
     int pyr_is_critical_state(void *op);
     void pyr_grant_critical_state_write(void *op);

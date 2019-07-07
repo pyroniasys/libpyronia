@@ -5,17 +5,30 @@
 #include <limits.h>
 #include "memdom_lib.h"
 
-struct memdom_metadata_struct *memdom[MAX_MEMDOM];
+static struct memdom_metadata_struct *memdom[MAX_MEMDOM];
 
 // defined in smv_lib.c
 int message_to_kernel(char *message);
 
-/* Create memory domain and return it to user */
-int memdom_create(){
-  int memdom_id;
+int memdom_register_new() {
+  int memdom_id = -1;
   memdom_id = message_to_kernel("memdom,create");
   if( memdom_id == -1 ){
     fprintf(stderr, "memdom_create() failed\n");
+    return -1;
+  }
+  return memdom_id;
+}
+
+/* Create memory domain and return it to user */
+int memdom_create(){
+  int memdom_id = -1;
+ 
+  memdom_id = memdom_register_new();
+  rlog("[%s] created memdom %d by smv %d\n", __func__, memdom_id, smvthread_get_id());
+  
+  if (memdom[memdom_id] != NULL) {
+    fprintf(stderr, "[%s] Oops trying to create new memdom for existing id %d\n", __func__, memdom_id);
     return -1;
   }
   /* Allocate metadata to hold memdom info */
@@ -63,6 +76,8 @@ int memdom_kill(int memdom_id){
 
   rlog("[%s] Memdom %d peak allocation: %lu bytes\n", __func__, memdom_id, memdom[memdom_id]->peak_alloc);
 
+  rlog("[%s] Killing memdom %d\n", __func__, memdom_id);
+  
   /* Free mmap */
   if( memdom[memdom_id]->start ) {
     rv = munmap(memdom[memdom_id]->start, memdom[memdom_id]->total_size);
@@ -170,13 +185,13 @@ unsigned long memdom_priv_get(int memdom_id, int smv_id){
 int memdom_priv_add(int memdom_id, int smv_id, unsigned long privs){
   int rv = 0;
   char buf[100];
+  rlog("[%s] smv %d in memdom %d\n", __func__, smv_id, memdom_id);
   sprintf(buf, "memdom,priv,%d,%d,add,%lu", memdom_id, smv_id, privs);
    rv = message_to_kernel(buf);
   if( rv == -1 ){
     rlog("kernel responded error\n");
     return -1;
   }
-  rlog("smv %d in memdom %d has new privilege after add\n", smv_id, memdom_id);
   return rv;
 }
 

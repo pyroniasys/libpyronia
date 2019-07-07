@@ -66,12 +66,14 @@ struct memdom_metadata_struct {
 #endif
   pthread_mutex_t mlock;  // protects this memdom in sn SMP environment
 };
-extern struct memdom_metadata_struct *memdom[MAX_MEMDOM];
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+  // register new memdom with kernel
+  int memdom_register_new(void);
+  
   /* Create memory domain and return it to user */
   int memdom_create(void);
 

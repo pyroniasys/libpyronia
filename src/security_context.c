@@ -122,64 +122,67 @@ void pyr_remove_allocation_record(struct pyr_security_context *ctx, void *addr) 
 int pyr_security_context_alloc(struct pyr_security_context **ctxp,
                                pyr_cg_node_t *(*collect_callstack_cb)(void),
 			       void (*interpreter_lock_acquire_cb)(void),
-			       void (*interpreter_lock_release_cb)(void)) {
+			       void (*interpreter_lock_release_cb)(void),
+			       bool is_child) {
     int err = -1;
     struct pyr_security_context *c = NULL;
     int interp_memdom = -1;
     int i = 0;
 
     // we want this to be allocated in the interpreter memdom
-    c = malloc(sizeof(struct pyr_security_context));
-    if (!c)
-      goto fail;
+    if (!is_child) {
+      c = malloc(sizeof(struct pyr_security_context));
+      if (!c)
+	goto fail;
 
-    pyr_interp_dom_alloc_t *interp_dom_meta = malloc(sizeof(pyr_interp_dom_alloc_t));
-    if (!interp_dom_meta)
-      goto fail;
-    if ((interp_memdom = memdom_create()) == -1) {
-      printf("[%s] Could not create interpreter dom # %d\n", __func__, 1);
-      goto fail;
-    }
+      pyr_interp_dom_alloc_t *interp_dom_meta = malloc(sizeof(pyr_interp_dom_alloc_t));
+      if (!interp_dom_meta)
+	goto fail;
+      if ((interp_memdom = memdom_create()) == -1) {
+	printf("[%s] Could not create interpreter dom # %d\n", __func__, 1);
+	goto fail;
+      }
+      
+      // don't forget to add the main thread to this memdom
+      smv_join_domain(interp_memdom, MAIN_THREAD);
+      memdom_priv_add(interp_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
 
-    // don't forget to add the main thread to this memdom
-    smv_join_domain(interp_memdom, MAIN_THREAD);
-    memdom_priv_add(interp_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
-
-    interp_dom_meta->memdom_id = interp_memdom;
-    interp_dom_meta->start = memdom_mmap(interp_dom_meta->memdom_id, 0, MEMDOM_HEAP_SIZE,
-                                         PROT_READ | PROT_WRITE,
-                                         MAP_PRIVATE | MAP_ANONYMOUS | MAP_MEMDOM, 0, 0);
-    if (interp_dom_meta->start == MAP_FAILED) {
-      printf("[%s] could not map memdom area\n", __func__);
+      interp_dom_meta->memdom_id = interp_memdom;
+      interp_dom_meta->start = memdom_mmap(interp_dom_meta->memdom_id, 0, MEMDOM_HEAP_SIZE,
+					   PROT_READ | PROT_WRITE,
+					   MAP_PRIVATE | MAP_ANONYMOUS | MAP_MEMDOM, 0, 0);
+      if (interp_dom_meta->start == MAP_FAILED) {
+	printf("[%s] could not map memdom area\n", __func__);
         goto fail;
-    }
-    interp_dom_meta->end = interp_dom_meta->start + MEMDOM_HEAP_SIZE;
-    interp_dom_meta->has_space = true;
-    interp_dom_meta->writable = true;
-    c->interp_doms = insert_memdom_metadata(interp_dom_meta, NULL);
-    if (!c->interp_doms) {
-      printf("[%s] could not insert first metadata\n", __func__);
+      }
+      interp_dom_meta->end = interp_dom_meta->start + MEMDOM_HEAP_SIZE;
+      interp_dom_meta->has_space = true;
+      interp_dom_meta->writable = true;
+      c->interp_doms = insert_memdom_metadata(interp_dom_meta, NULL);
+      if (!c->interp_doms) {
+	printf("[%s] could not insert first metadata\n", __func__);
         goto fail;
-    }
+      }
 
-    c->main_path = NULL;
-    // this ensures that we really do revoke write access at the end of pyr_init
-    c->nested_grants = 1;
-
-    /*if (!collect_callstack_cb) {
+      c->main_path = NULL;
+      // this ensures that we really do revoke write access at the end of pyr_init
+      c->nested_grants = 1;
+      
+      /*if (!collect_callstack_cb) {
         printf("[%s] Need non-null callstack collect callback\n", __func__);
         err = -EINVAL;
         goto fail;
 	}*/
-    c->collect_callstack_cb = collect_callstack_cb;
-    c->interpreter_lock_acquire_cb = interpreter_lock_acquire_cb;
-    c->interpreter_lock_release_cb = interpreter_lock_release_cb;
-
-    // this list will be added to whenever a new non-builtin extenion
-    // is loaded via dlopen
-    c->native_libs = NULL;
-
-    *ctxp = c;
+      c->collect_callstack_cb = collect_callstack_cb;
+      c->interpreter_lock_acquire_cb = interpreter_lock_acquire_cb;
+      c->interpreter_lock_release_cb = interpreter_lock_release_cb;
+      
+      // this list will be added to whenever a new non-builtin extenion
+      // is loaded via dlopen
+      c->native_libs = NULL;
+      
+      *ctxp = c;
+    }
     return 0;
  fail:
     if (c)
@@ -214,7 +217,7 @@ void free_interp_dom_metadata(pyr_interp_dom_alloc_t **dom) {
 #endif
     if (d->start) {
         memdom_priv_add(d->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
-        memdom_kill(d->memdom_id);
+	memdom_kill(d->memdom_id);
     }
     free(d);
     *dom = NULL;
