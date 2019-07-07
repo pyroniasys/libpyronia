@@ -11,7 +11,7 @@ SHADOW_CLIENT = "myShadowClient"
 # this device.
 HOST_NAME = "a2t65gjx7e9mk3-ats.iot.us-west-2.amazonaws.com"
 
-path = "/home/pyronia/libpyronia/apps/aws-moisture-sensor"
+path = "/home/pyronia/libpyronia/apps/plant_watering"
 
 # The relative path to the correct root CA file for AWS IoT, 
 # which you have already saved onto this device.

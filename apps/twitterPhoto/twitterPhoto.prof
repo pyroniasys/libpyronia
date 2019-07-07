@@ -5,6 +5,7 @@
 /sys/devices/system/cpu/ rm,
 /home/pyronia/libpyronia/apps/twitterPhoto/twitterPhoto.py rm,
 /home/pyronia/libpyronia/apps/twitterPhoto/api_keys.py rm,
+/home/pyronia/libpyronia/apps/twitterPhoto/api_keys.pyc rm,
 /home/pyronia/libpyronia/apps/twitterPhoto/twitterPhoto.py.data rw,
 /home/pyronia/libpyronia/testsuite/python-tests/edge.jpg r,
 /etc/mime.types rm,
