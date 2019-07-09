@@ -90,7 +90,7 @@ int pyr_init(const char *main_mod_path,
     /* Register with the memdom subsystem */
     // We don't want the main thread's memdom to be
     // globally accessible, so init with 0.
-    err = smv_main_init(0);
+    err = smv_main_init(0, is_child);
     if (err < 0) {
       printf("[%s] Memdom subsystem registration failure\n", __func__);
       goto out;
@@ -126,19 +126,21 @@ int pyr_init(const char *main_mod_path,
         goto out;
     }
 
-    /* Parse the library policy from disk */
-    err = pyr_parse_lib_policy(lib_policy_file, &policy);
-    if (err < 0) {
-      printf("[%s] Parsing lib policy failure: %d\n", __func__, err);
-      goto out;
+    if (!is_child) {
+      /* Parse the library policy from disk */
+      err = pyr_parse_lib_policy(lib_policy_file, &policy);
+      if (err < 0) {
+	printf("[%s] Parsing lib policy failure: %d\n", __func__, err);
+	goto out;
+      }
     }
-
+    
     /* Initialize the stack inspection communication channel with
      * the kernel */
-    err = pyr_init_si_comm(policy);
+    err = pyr_init_si_comm(policy, is_child);
     if (err) {
-        printf("[%s] SI comm channel initialization failed\n", __func__);
-        goto out;
+      printf("[%s] SI comm channel initialization failed\n", __func__);
+      goto out;
     }
 
     //    PyEval_InitThreads(); // needed to enable stack inspector

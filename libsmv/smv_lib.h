@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 /* Telling the kernel that this process will be using the secure memory view model */
-int smv_main_init(int);
+  int smv_main_init(int, int);
 
 /* Create a smv and return the ID of the newly created smv */
 int smv_create(void);

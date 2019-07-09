@@ -40,9 +40,10 @@ int message_to_kernel(char *message) {
 
 /* Telling the kernel that this process will be using the secure memory view model
  * The master thread must call this routine to notify the kernel its status */
-int smv_main_init(int global) {
+int smv_main_init(int global, int is_child) {
   int rv = -1;
   int nl_sock;
+  char buf[100];
   ALLOW_GLOBAL = 0;
 
   /* Open the netlink socket */
@@ -58,7 +59,8 @@ int smv_main_init(int global) {
   teardown_netlink_socket(nl_sock);
 
   /* Set mm->using_smv to true in kernel space */
-  rv = message_to_kernel("smv,maininit");
+  sprintf(buf, "smv,maininit,%d", is_child);
+  rv = message_to_kernel(buf);
   if (rv != 0) {
     fprintf(stderr, "smv_main_init() failed\n");
     return -1;
@@ -73,7 +75,7 @@ int smv_main_init(int global) {
   /* Decide whether we allow all threads to access global memdom */
   ALLOW_GLOBAL = global;
 
-  rlog("smv_main_init(%d)\n", ALLOW_GLOBAL);
+  rlog("smv_main_init(%d, %d)\n", ALLOW_GLOBAL, is_child);
   return rv;
 }
 

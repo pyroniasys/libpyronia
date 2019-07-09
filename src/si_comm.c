@@ -174,7 +174,7 @@ static int init_si_socket() {
 /* Open the netlink socket to communicate with the
  * kernel, and register this process as a Pyronia-secured process
  * with the given serialized library policy. */
-int pyr_init_si_comm(char *policy) {
+int pyr_init_si_comm(char *policy, bool is_child) {
     int err = 0;
     char *reg_str = NULL;
 
@@ -185,17 +185,19 @@ int pyr_init_si_comm(char *policy) {
       goto out;
     }
 
-    reg_str = pyr_alloc_critical_runtime_state(INT32_STR_SIZE+strlen(policy)+2);
-    if (!reg_str) {
-        goto out;
+    if (!is_child) {
+      reg_str = pyr_alloc_critical_runtime_state(INT32_STR_SIZE+strlen(policy)+2);
+      if (!reg_str) {
+	goto out;
+      }
+      
+      sprintf(reg_str, "%d:%s", si_port, policy);
+      err = pyr_to_kernel(SI_COMM_C_REGISTER_PROC, SI_COMM_A_USR_MSG, reg_str);
+      if (err) {
+	goto out;
+      }
     }
-
-    sprintf(reg_str, "%d:%s", si_port, policy);
-    err = pyr_to_kernel(SI_COMM_C_REGISTER_PROC, SI_COMM_A_USR_MSG, reg_str);
-    if (err) {
-        goto out;
-    }
-
+    
  out:
     if (reg_str)
         pyr_free_critical_state(reg_str);
