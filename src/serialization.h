@@ -18,6 +18,7 @@ extern "C" {
 #endif
 
   int pyr_parse_lib_policy(const char *policy_fname, char **parsed);
+  void *get_si_memdom_addr(void);
   int finalize_callstack_str(char **cs_str);
 
 #ifdef __cplusplus

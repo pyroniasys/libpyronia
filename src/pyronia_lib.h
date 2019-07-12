@@ -36,6 +36,7 @@ extern "C" {
     int pyr_run_native_func_isolated(const char *lib, void *(*func)(void));
     int pyr_is_interpreter_build(void);
     void pyr_exit(void);
+    struct pyr_security_context *pyr_get_runtime_sec_ctx(void);
 
 #ifdef __cplusplus
 }

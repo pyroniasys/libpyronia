@@ -139,7 +139,7 @@ void *memdom_mmap(int memdom_id,
     fprintf(stderr, "memdom_mmap_register(%d) failed\n", memdom_id);
     return NULL;
   }
-  rlog("Memdom ID %d registered for mmap\n", memdom_id);
+  rlog("[%s] Memdom ID %d registered for mmap\n", __func__, memdom_id);
 
   /* Call the actual mmap with memdom flag */
   flags |= MAP_MEMDOM;
@@ -280,12 +280,12 @@ struct alloc_metadata *walkAllocsList(int memdom_id, void *addr, int dump) {
 
 static struct alloc_metadata *alloc_metadata_init(void *addr, size_t size) {
     struct alloc_metadata *alloc = NULL;
-
+    
     /* The first free list should be the entire mmap region */
 #ifdef INTERCEPT_MALLOC
 #undef malloc
 #endif
-    alloc = (struct alloc_metadata*) malloc (sizeof(struct alloc_metadata));
+    alloc = (struct alloc_metadata*) malloc(sizeof(struct alloc_metadata));
 #ifdef INTERCEPT_MALLOC
 #define malloc(sz) memdom_alloc(memdom_private_id(), sz)
 #endif
@@ -426,7 +426,7 @@ void remove_alloc_metadata_from(struct alloc_metadata *to_remove, struct alloc_m
 /* Initialize free list */
 void free_list_init(int memdom_id){
   struct alloc_metadata *new_free_list;
-
+  
   new_free_list = alloc_metadata_init(memdom[memdom_id]->start, memdom[memdom_id]->total_size);
 #ifdef PYR_MEMDOM_BENCH
   memdom[memdom_id]->metadata_cur += sizeof(struct alloc_metadata);
@@ -479,9 +479,11 @@ void *memdom_alloc(int memdom_id, unsigned long sz){
 
     memblock = (char*) memdom_mmap(memdom_id, 0, MEMDOM_HEAP_SIZE,
 				   PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_MEMDOM, 0, 0);
-
-    if (!memblock)
+    
+    if (!memblock) {
+      rlog("[%s] Could not mmap memory for memdom %d\n", __func__, memdom_id);
       goto out;
+    }
   }
 
   /* Round up size to multiple of cache line size: 64B */
@@ -621,23 +623,23 @@ void memdom_free(void* data){
   rlog("[%s] allocs head: %p\n", __func__, memdom[memdom_id]->allocs);
   alloc = walkAllocsList(memdom_id, data, 1);
   if (!alloc) {
-      rlog("[%s] Something went wrong. Data block at %p not found\n", __func__, data);
-    return;
+    rlog("[%s] Something went wrong. Data block at %p not found\n", __func__, data);
+    goto out;
   }
-
+  
   /* Free the memory */
   rlog("[%s] block addr: %p, freeing %lu bytes in memdom %d\n", __func__, alloc->addr, alloc->size, memdom_id);
   memset(data, 0, alloc->size);
-
+  
   /* Move this metadata from the allocs to the free list */
   remove_alloc_metadata_from(alloc, &memdom[memdom_id]->allocs);
-  memdom[memdom_id]->cur_alloc -= alloc->size;
   dumpFreeListHead(memdom_id);
   free_list_insert(memdom_id, alloc);
+  memdom[memdom_id]->cur_alloc -= alloc->size;
   rlog("[%s] allocs head: %p\n", __func__, memdom[memdom_id]->allocs);
   rlog("[%s] Move alloc to free list\n", __func__);
   rlog("Current allocations: %lu bytes\n", memdom[memdom_id]->cur_alloc);
-
+ out:
   pthread_mutex_unlock(&memdom[memdom_id]->mlock);
 }
 

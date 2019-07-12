@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <sys/mman.h>
 #include <memdom_lib.h>
+#include <unistd.h>
 
 #include "security_context.h"
 #include "util.h"
@@ -142,9 +143,16 @@ int pyr_security_context_alloc(struct pyr_security_context **ctxp,
 	printf("[%s] Could not create interpreter dom # %d\n", __func__, 1);
 	goto fail;
       }
+
+      rlog("[%s] New interpreter memdom: %d\n", __func__, interp_memdom);
       
       // don't forget to add the main thread to this memdom
       smv_join_domain(interp_memdom, MAIN_THREAD);
+      if (smv_is_in_domain(interp_memdom, MAIN_THREAD) != 1) {
+	printf("[%s] main thread %d not in first interp memdom!!!\n", __func__, smvthread_get_id());
+	goto fail;
+      }
+      
       memdom_priv_add(interp_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
 
       interp_dom_meta->memdom_id = interp_memdom;
@@ -236,5 +244,6 @@ void pyr_security_context_free(struct pyr_security_context **ctxp) {
 
     free_avl_tree(&c->interp_doms);
     free(c);
+    rlog("[%s] Called from PID %d: %p\n", __func__, getpid(), c);
     *ctxp = NULL;
 }

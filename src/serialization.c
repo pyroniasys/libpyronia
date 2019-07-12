@@ -37,18 +37,19 @@ int pyr_serialize_callstack(const char *func_fqn) {
       goto fail;
     }
 
-    tmp_ser = memdom_alloc(si_memdom, ser_len+strlen(func_fqn)+1);
-    if (!tmp_ser)
+    if (!get_si_memdom_addr())
       goto fail;
 
+    tmp_ser = (char *) get_si_memdom_addr();
+    
     if (serialized)
       // because we traverse the call stack bottom up in the runtime,
       // but we want the kernel to check it top-down, we need to
       // copy the previous frames into the end of the string
       memcpy(tmp_ser+strlen(func_fqn)+1, serialized, ser_len);
-    memdom_free(serialized);
+    memset(tmp_ser, 0, strlen(func_fqn));
     serialized = tmp_ser;
-
+    
     memcpy(serialized, func_fqn, strlen(func_fqn));
     memcpy(serialized+strlen(func_fqn), CALLSTACK_STR_DELIM, 1);
     ser_len += strlen(func_fqn)+1;
@@ -59,8 +60,6 @@ int pyr_serialize_callstack(const char *func_fqn) {
     goto out;
 
  fail:
-    if (serialized)
-      memdom_free(serialized);
     serialized = NULL;
     ser_len = 1;
     node_count = 0;
@@ -71,20 +70,29 @@ int pyr_serialize_callstack(const char *func_fqn) {
 int finalize_callstack_str(char **cs_str) {
   int ret = -1;
   char *out = NULL;
+  char tmp[1024];
+  
   // now we need to pre-append the len so the kernel knows how many
   // nodes to expect to de-serialize
   if (!serialized)
     goto out;
 
-  out = memdom_alloc(si_memdom, strlen(serialized)+INT32_STR_SIZE+2);
-  if (!out)
+  if (!get_si_memdom_addr())
     goto out;
-  memset(out, 0, strlen(serialized)+INT32_STR_SIZE+2);
-  ret = sprintf(out, "%d,%s", node_count, serialized);
+
+  out = (char *) get_si_memdom_addr();
+  if (serialized) {
+    // because we traverse the call stack bottom up in the runtime,
+    // but we want the kernel to check it top-down, we need to
+    // copy the previous frames into the end of the string
+    memset(tmp, 0, strlen(serialized)+1);
+    memcpy(tmp, serialized, strlen(serialized));
+  }
+  
+  memset(out, 0, INT32_STR_SIZE+2+strlen(serialized));
+  ret = sprintf(out, "%d,%s", node_count, tmp);
   rlog("[%s] Serialized call stack: %s\n", __func__, out);
  out:
-    if (serialized)
-        memdom_free(serialized);
     serialized = NULL;
     ser_len = 1;
     node_count = 0;

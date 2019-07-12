@@ -42,7 +42,7 @@ static inline int init_child_memdoms() {
       goto out;
     }
     else {
-      printf("[%s] Registered new memdom\n", __func__);
+      rlog("[%s] Registered new memdom\n", __func__);
       if (si_memdom != -1 && err == si_memdom)
 	continue;
       smv_join_domain(err, MAIN_THREAD);
@@ -54,6 +54,16 @@ static inline int init_child_memdoms() {
   err = 0;
  out:
   return err;
+}
+
+static void avl_set_space(avl_node_t *n) {
+    pyr_interp_dom_alloc_t *dalloc = NULL;
+    if (n == NULL || n->memdom_metadata == NULL)
+        return;
+
+    n->memdom_metadata->has_space = true;
+    avl_set_space(n->left);
+    avl_set_space(n->right);
 }
 
 /** Do all the necessary setup for a language runtime to use
@@ -72,7 +82,7 @@ int pyr_init(const char *main_mod_path,
     pthread_mutexattr_t attr;
 
     is_inspecting_stack = true;
-    printf("[%s] Initializing pyronia for module %s in proc %d\n", __func__, main_mod_path, getpid());
+    rlog("[%s] Initializing pyronia for module %s in proc %d\n", __func__, main_mod_path, getpid());
     
     // We make an exception for setup.py and the sysconfig modules
     // so we don't somehow clobber installs with Pyronia checks
@@ -111,7 +121,8 @@ int pyr_init(const char *main_mod_path,
       if (err) {
 	printf("[%s] Memdom re-registration for child proc failed\n", __func__);
 	goto out;
-      }      
+      }
+      avl_set_space(runtime->interp_doms);
     }
     
     /* Initialize the runtime's security context */
@@ -125,6 +136,7 @@ int pyr_init(const char *main_mod_path,
         printf("[%s] Runtime initialization failure\n", __func__);
         goto out;
     }
+    runtime->nested_grants = 1; // this ensures the child starts from scatch
 
     if (!is_child) {
       /* Parse the library policy from disk */
@@ -137,16 +149,23 @@ int pyr_init(const char *main_mod_path,
     
     /* Initialize the stack inspection communication channel with
      * the kernel */
-    err = pyr_init_si_comm(policy, is_child);
-    if (err) {
-      printf("[%s] SI comm channel initialization failed\n", __func__);
-      goto out;
+    if (!is_child) {
+      err = pyr_init_si_comm(policy, is_child);
+      if (err) {
+	printf("[%s] SI comm channel initialization failed\n", __func__);
+	goto out;
+      }
+
+      //PyEval_InitThreads(); // needed to enable stack inspector
+
+      err = pyr_callstack_req_listen(is_child);
+      if (err)
+	goto out;
     }
-
-    //    PyEval_InitThreads(); // needed to enable stack inspector
-
-    pyr_callstack_req_listen(is_child);
-
+    else {
+      is_inspecting_stack = false;
+    }
+    
     // create another SMV to be used by threads originally created by
     // pthread_create. We won't allow mixing pthreads woth smvthreads
     /*pyr_smv_id = smv_create();
@@ -165,8 +184,12 @@ int pyr_init(const char *main_mod_path,
       pyr_free_critical_state(policy);
     /* Revoke access to the interpreter domain now */
     pyr_revoke_critical_state_write(NULL);
-    if (!err)
+    if (!err) {
       rlog("[%s] Initialized pyronia extensions\n", __func__);
+    }
+    else {
+      pyr_exit();
+    }
     return err;
 }
 
@@ -247,8 +270,8 @@ void *pyr_alloc_critical_runtime_state(size_t size) {
         new_block = memdom_alloc(dalloc->memdom_id, size);
 
         if (new_block) {
-            rlog("[%s] Allocated %lu bytes in memdom %d\n", __func__, size, dalloc->memdom_id);
-            goto out;
+	  rlog("[%s] Allocated %lu bytes in memdom %d\n", __func__, size, dalloc->memdom_id);
+	  goto out;
         }
         else {
             dalloc->has_space = false;
@@ -338,7 +361,7 @@ static void avl_set_writable(avl_node_t *n) {
     if (dalloc->has_space) {
         memdom_priv_add(dalloc->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
         dalloc->writable = true;
-        rlog("[%s] Granted write access to memdom %d\n", __func__, dalloc->memdom_id);
+	rlog("[%s] Granted write access to memdom %d\n", __func__, dalloc->memdom_id);
     }
     avl_set_writable(n->left);
     avl_set_writable(n->right);
@@ -495,11 +518,21 @@ static void avl_join_si(avl_node_t *n, int si_smv_id) {
     avl_set_readonly(n->right);
 }
 
+static void *si_memdom_addr = NULL; 
+void *get_si_memdom_addr() {
+  return si_memdom_addr;
+}
+
+struct pyr_security_context *pyr_get_runtime_sec_ctx(void) {
+  return runtime;
+}
+
 /** Starts the SI listener and dispatch thread.
  */
-void pyr_callstack_req_listen(bool is_child) {
+int pyr_callstack_req_listen(bool is_child) {
     pthread_attr_t attr;
     int i = 0;
+    void *tmp = NULL;
 
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
@@ -508,7 +541,7 @@ void pyr_callstack_req_listen(bool is_child) {
       si_smv_id = smv_create();
       if (si_smv_id == -1) {
 	printf("[%s] Could not create and SMV for the SI thread\n", __func__);
-	return;
+	return -1;
       }
       
       // we trust this thread, but also, we need this thread to be able
@@ -522,11 +555,26 @@ void pyr_callstack_req_listen(bool is_child) {
       if (si_memdom == -1) {
 	printf("[%s] Could not create SI thread memdom\n", __func__);
       }
+      // temporarily allow main to write to memdom 2 so we can allocate the page
+      smv_join_domain(si_memdom, MAIN_THREAD);
+      memdom_priv_add(si_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
+      si_memdom_addr = memdom_mmap(si_memdom, 0, MEMDOM_HEAP_SIZE,
+				   PROT_READ | PROT_WRITE,
+				   MAP_PRIVATE | MAP_ANONYMOUS | MAP_MEMDOM, 0, 0);
+      if (si_memdom_addr == NULL) {
+	goto fail;
+      }
+      smv_leave_domain(si_memdom, MAIN_THREAD);
     }
     smv_join_domain(si_memdom, si_smv_id);
     memdom_priv_add(si_memdom, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);
 
+    rlog("[%s] security context %p\n", __func__, runtime);
     smvthread_create_attr(si_smv_id, &recv_th, &attr, pyr_recv_from_kernel, NULL);
+    return 0;
+ fail:
+    printf("[%s] Error allocating SI memdom\n", __func__);
+    return -1;
 }
 
 int pyr_is_interpreter_build() {
@@ -542,15 +590,17 @@ void pyr_exit() {
     // suspend if the stack tracer thread is running
     pyr_is_inspecting();
 
-    rlog("[%s] Exiting Pyronia runtime\n", __func__);
+    rlog("[%s] Exiting Pyronia runtime %d\n", __func__, getpid());
     pthread_cancel(recv_th);
     pyr_teardown_si_comm();
 #ifdef PYR_MEMDOM_BENCH
     printf("%d\n", interp_memdom_pool_size);
 #endif
-    pyr_grant_critical_state_write((void *)runtime->main_path);
-    if (runtime->main_path)
-      pyr_free_critical_state(runtime->main_path);
+    if (runtime) {
+      pyr_grant_critical_state_write((void *)runtime->main_path);
+      if (runtime->main_path)
+	pyr_free_critical_state(runtime->main_path);
+    }
     pyr_security_context_free(&runtime);
 }
 

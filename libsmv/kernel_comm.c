@@ -139,6 +139,8 @@ int send_message(int netlink_socket, int family_id, int nl_cmd, int nl_attr, uin
         char buf[256];
     } ans;
 
+    rlog("[%s] Sending message %s to kernel\n", __func__, message);
+    
     int r = send_req(netlink_socket, family_id, nl_cmd, nl_attr, port_id, message);
     /* Recv message */
     int rep_len = recv(netlink_socket, &ans, sizeof(ans), 0);
