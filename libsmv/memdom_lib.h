@@ -92,6 +92,8 @@ extern "C" {
   /* Deallocate npages pages in memory domain memdom */
   void memdom_free(void* data);
 
+  void memdom_free_from(int memdom_id, void *data);
+
   /* Return privilege status of smv rib in memory domain memdom */
   unsigned long memdom_priv_get(int memdom_id, int smv_id);
 

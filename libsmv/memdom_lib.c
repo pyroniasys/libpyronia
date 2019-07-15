@@ -594,18 +594,9 @@ void *memdom_alloc(int memdom_id, unsigned long sz){
   return memblock;
 }
 
-/* Deallocate data in memory domain memdom */
-void memdom_free(void* data){
-  int memdom_id = -1;
+void memdom_free_from(int memdom_id, void *data) {
   struct alloc_metadata *alloc = NULL;
   
-  if (!data) {
-    rlog("[%s] Data block is NULL\n", __func__);
-    return;
-  }
-
-  memdom_id = memdom_query_id(data);
-
   if (memdom_id == -1) {
     rlog("[%s] Data block at %p not in memdom\n", __func__, data);
     return;
@@ -613,6 +604,16 @@ void memdom_free(void* data){
   else if (memdom_id == 0) {
     rlog("[%s] Freeing memory in main thread memdom\n", __func__);
     //free(data);
+    return;
+  }
+  
+  if (memdom[memdom_id] == NULL) {
+    printf("[%s] Invalid memdom ID %d\n", __func__, memdom_id);
+    return;
+  }
+  
+  if (!data) {
+    rlog("[%s] Data block is NULL\n", __func__);
     return;
   }
 
@@ -641,6 +642,21 @@ void memdom_free(void* data){
   rlog("Current allocations: %lu bytes\n", memdom[memdom_id]->cur_alloc);
  out:
   pthread_mutex_unlock(&memdom[memdom_id]->mlock);
+}
+
+/* Deallocate data in memory domain memdom */
+void memdom_free(void* data){
+  int memdom_id = -1;
+  struct alloc_metadata *alloc = NULL;
+  
+  if (!data) {
+    rlog("[%s] Data block is NULL\n", __func__);
+    return;
+  }
+
+  memdom_id = memdom_query_id(data);
+
+  memdom_free_from(memdom_id, data);
 }
 
 /* Get the number of free bytes in a memdom */

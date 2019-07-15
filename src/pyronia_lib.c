@@ -322,7 +322,7 @@ int pyr_free_critical_state(void *op) {
     dalloc = get_interp_dom_memdom(op);
     if (dalloc && dalloc->memdom_id > 0) {
         pthread_mutex_lock(&security_ctx_mutex);
-        memdom_free(op);
+        memdom_free_from(dalloc->memdom_id, op);
         if (dalloc->has_space == false) {
             dalloc->has_space = true;
         }
@@ -616,59 +616,4 @@ pyr_cg_node_t *pyr_collect_runtime_callstack() {
     rlog("[%s] Done collecting callstack\n", __func__);
     pthread_mutex_unlock(&security_ctx_mutex);
     return cg;
-}
-
-/* CALLGRAPH ALLOCATION AND FREE */
-/* These mirror the callgraph allocation and free functions.
- * Until we register a new syscall, we need to be careful
- * to keep them in sync. */
-
-// Allocate a new callgraph node
-int pyr_new_cg_node(pyr_cg_node_t **cg_root, const char* lib,
-                        enum pyr_data_types data_type,
-                        pyr_cg_node_t *child) {
-
-    pyr_cg_node_t *n = memdom_alloc(si_memdom, sizeof(pyr_cg_node_t));
-
-    if (n == NULL) {
-        goto fail;
-    }
-
-    n->lib = memdom_alloc(si_memdom, strlen(lib)+1);
-    if (!n->lib) {
-        goto fail;
-    }
-
-    memset(n->lib, 0, strlen(lib)+1);
-    memcpy(n->lib, lib, strlen(lib));
-    n->data_type = data_type;
-    n->child = child;
-
-    *cg_root = n;
-    return 0;
- fail:
-    memdom_free(n);
-    return -1;
-}
-
-// Recursively free the callgraph nodes
-static void free_node(pyr_cg_node_t **node) {
-    pyr_cg_node_t *n = *node;
-
-    if (n == NULL) {
-      return;
-    }
-
-    if (n->child != NULL) {
-      free_node(&n->child);
-    }
-
-    memdom_free(n->lib);
-    memdom_free(n);
-    *node = NULL;
-}
-
-// Free a callgraph
-void pyr_free_callgraph(pyr_cg_node_t **cg_root) {
-    free_node(cg_root);
 }
