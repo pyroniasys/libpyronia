@@ -23,6 +23,10 @@
 #include "si_comm.h"
 #include "util.h"
 
+#ifdef PYRONIA_BENCH
+#include "benchmarking_util.h"
+#endif
+
 static struct pyr_security_context *runtime = NULL;
 static int pyr_smv_id = -1;
 static int si_smv_id = -1;
@@ -197,8 +201,13 @@ static pyr_interp_dom_alloc_t *new_interp_memdom() {
   int interp_memdom = -1;
   pyr_interp_dom_alloc_t *new_dom = NULL;
 
+#ifdef PYRONIA_BENCH
+    struct timespec start, stop;
+    get_cpu_time(&start);
+#endif
+
   if (interp_memdom_pool_size+1 > MAX_NUM_INTERP_DOMS)
-    return NULL;
+      goto fail;
 
   new_dom = malloc(sizeof(pyr_interp_dom_alloc_t));
   if (!new_dom)
@@ -233,10 +242,16 @@ static pyr_interp_dom_alloc_t *new_interp_memdom() {
 
   interp_memdom_pool_size++;
   rlog("[%s] new memdom %d\n", __func__, new_dom->memdom_id);
-  return new_dom;
+  goto out;
  fail:
   free_interp_dom_metadata(&new_dom);
-  return NULL;
+  new_dom = NULL;
+ out:
+#ifdef PYRONIA_BENCH
+    get_cpu_time(&stop);
+    record_memdom_creat(start, stop);
+#endif
+  return new_dom;
 }
 
 void print_avl(avl_node_t *n) {
@@ -253,15 +268,24 @@ void *pyr_alloc_critical_runtime_state(size_t size) {
     void *new_block = NULL;
     int i = 0;
     pyr_interp_dom_alloc_t *dalloc = NULL;
-    if (is_build)
-      return malloc(size);
+
+#ifdef PYRONIA_BENCH
+    struct timespec start, stop;
+    get_cpu_time(&start);
+#endif
+
+    if (is_build) {
+        new_block =  malloc(size);
+        goto out;
+    }
 
     if (!runtime)
-        return NULL;
+        goto out;
 
     if(size > MEMDOM_HEAP_SIZE) {
       rlog("[%s] Requested size is too large for interpreter dom.\n", __func__);
-      return (void *)1;
+      new_block = (void *)1;
+      goto out;
     }
 
     pthread_mutex_lock(&security_ctx_mutex);
@@ -293,6 +317,10 @@ void *pyr_alloc_critical_runtime_state(size_t size) {
     //print_avl(runtime->interp_doms);
  out:
     pthread_mutex_unlock(&security_ctx_mutex);
+#ifdef PYRONIA_BENCH
+    get_cpu_time(&stop);
+    record_malloc(start, stop);
+#endif
     return new_block;
 }
 
@@ -312,12 +340,19 @@ static pyr_interp_dom_alloc_t *get_interp_dom_memdom(void *op) {
  */
 int pyr_free_critical_state(void *op) {
     pyr_interp_dom_alloc_t *dalloc = NULL;
+    bool freed = false;
+
+#ifdef PYRONIA_BENCH
+    struct timespec start, stop;
+    get_cpu_time(&start);
+#endif
+
     if (is_build) {
-        return 0;
+        goto out;
     }
 
     if (!runtime)
-        return 0;
+        goto out;
 
     dalloc = get_interp_dom_memdom(op);
     if (dalloc && dalloc->memdom_id > 0) {
@@ -328,9 +363,14 @@ int pyr_free_critical_state(void *op) {
         }
         pthread_mutex_unlock(&security_ctx_mutex);
         rlog("[%s] Freed %p\n", __func__, op);
-        return 1;
+        freed = true;
     }
-    return 0;
+ out:
+#ifdef PYRONIA_BENCH
+    get_cpu_time(&stop);
+    record_free(start, stop);
+#endif
+    return freed;
 }
 
 /** Wrapper around memdom_query_id. Returns 1 if the
@@ -354,12 +394,23 @@ int pyr_is_critical_state(void *op) {
 
 static void avl_set_writable(avl_node_t *n) {
     pyr_interp_dom_alloc_t *dalloc = NULL;
+#ifdef PYRONIA_BENCH
+    struct timespec start, stop;
+#endif
+
     if (n == NULL || n->memdom_metadata == NULL)
         return;
 
     dalloc = n->memdom_metadata;
     if (dalloc->has_space) {
+#ifdef PYRONIA_BENCH
+        get_cpu_time(&start);
+#endif
         memdom_priv_add(dalloc->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
+#ifdef PYRONIA_BENCH
+        get_cpu_time(&stop);
+        record_priv_add(start, stop);
+#endif
         dalloc->writable = true;
 	rlog("[%s] Granted write access to memdom %d\n", __func__, dalloc->memdom_id);
     }
@@ -372,9 +423,20 @@ static void avl_set_readonly(avl_node_t *n) {
     if (n == NULL || n->memdom_metadata == NULL)
         return;
 
+#ifdef PYRONIA_BENCH
+    struct timespec start, stop;
+#endif
+
     dalloc = n->memdom_metadata;
     if (dalloc->writable) {
+#ifdef PYRONIA_BENCH
+        get_cpu_time(&start);
+#endif
         memdom_priv_del(dalloc->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
+#ifdef PYRONIA_BENCH
+        get_cpu_time(&stop);
+        record_priv_del(start, stop);
+#endif
         dalloc->writable = false;
         rlog("[%s] Revoked write access to memdom %d\n", __func__, dalloc->memdom_id);
     }
@@ -389,15 +451,20 @@ void pyr_grant_critical_state_write(void *op) {
     pyr_interp_dom_alloc_t *dalloc = NULL;
 
     if (is_build)
-      return;
+        return;
 
     // suspend if the stack tracer thread is running
     pyr_is_inspecting();
 
+#ifdef PYRONIA_BENCH
+    struct timespec start, stop, priv_start, priv_stop;
+    get_cpu_time(&start);
+#endif
+
     // let's skip adding write privs if our runtime
     // doesn't have a domain or our domain is invalid
     if (!runtime) {
-        return;
+        goto out;
     }
 
     // if the caller has given us an insecure object, exit
@@ -405,7 +472,7 @@ void pyr_grant_critical_state_write(void *op) {
       dalloc = get_interp_dom_memdom(op);
       rlog("[%s] grant access to obj %p?\n", __func__, op);
       if (!dalloc || dalloc->memdom_id <= 0)
-        return;
+          goto out;
     }
 
     pthread_mutex_lock(&security_ctx_mutex);
@@ -413,10 +480,17 @@ void pyr_grant_critical_state_write(void *op) {
     // modify, we should just go ahead an grant that particular
     // memdom the write access
     if (op && !dalloc->writable) {
+#ifdef PYRONIA_BENCH
+        get_cpu_time(&priv_start);
+#endif
       memdom_priv_add(dalloc->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
+#ifdef PYRONIA_BENCH
+      get_cpu_time(&priv_stop);
+      record_priv_add(priv_start, priv_stop);
+#endif
       dalloc->writable = true;
       rlog("[%s] Granted write access to obj in memdom %d\n", __func__, dalloc->memdom_id);
-      goto out;
+      goto granted;
     }
 
     rlog("[%s] Grants: %d\n", __func__, runtime->nested_grants);
@@ -427,9 +501,15 @@ void pyr_grant_critical_state_write(void *op) {
     if (runtime->nested_grants == 0) {
         avl_set_writable(runtime->interp_doms);
     }
- out:
+ granted:
     runtime->nested_grants++;
     pthread_mutex_unlock(&security_ctx_mutex);
+ out:
+#ifdef PYRONIA_BENCH
+    get_cpu_time(&stop);
+    record_grant(start, stop);
+#endif
+    return;
 }
 
 /** Revokes the main thread's write privileges to the interpreter domain.
@@ -443,10 +523,15 @@ void pyr_revoke_critical_state_write(void *op) {
     // suspend if the stack tracer thread is running
     pyr_is_inspecting();
 
+#ifdef PYRONIA_BENCH
+    struct timespec start, stop, priv_start, priv_stop;
+    get_cpu_time(&start);
+#endif
+
     // let's skip adding write privs if our runtime
     // doesn't have a domain or our domain is invalid
     if (!runtime) {
-        return;
+        goto out;
     }
 
     // if the caller has given us an insecure object, exit
@@ -454,25 +539,38 @@ void pyr_revoke_critical_state_write(void *op) {
       dalloc = get_interp_dom_memdom(op);
       rlog("[%s] revoke access from obj %p?\n", __func__, op);
       if (!dalloc || dalloc->memdom_id <= 0)
-        return;
+        goto out;
     }
 
     pthread_mutex_lock(&security_ctx_mutex);
     rlog("[%s] Number of grants: %d\n", __func__, runtime->nested_grants);
     runtime->nested_grants--;
     if (op && runtime->nested_grants == 0) {
+#ifdef PYRONIA_BENCH
+        get_cpu_time(&priv_start);
+#endif
       memdom_priv_del(dalloc->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
+#ifdef PYRONIA_BENCH
+      get_cpu_time(&priv_stop);
+      record_priv_del(priv_start, priv_stop);
+#endif
       dalloc->writable = false;
       rlog("[%s] Revoked write access for obj in domain %d\n", __func__, dalloc->memdom_id);
-      goto out;
+      goto revoked;
     }
 
     // same optimization as above
     if (runtime->nested_grants == 0) {
         avl_set_readonly(runtime->interp_doms);
     }
- out:
+ revoked:
     pthread_mutex_unlock(&security_ctx_mutex);
+ out:
+#ifdef PYRONIA_BENCH
+    get_cpu_time(&stop);
+    record_revoke(start, stop);
+#endif
+    return;
 }
 
 /** Starts an SMV thread that has access to the MAIN_THREAD memdom.
@@ -609,9 +707,19 @@ void pyr_exit() {
  */
 pyr_cg_node_t *pyr_collect_runtime_callstack() {
     pyr_cg_node_t *cg = NULL;
+#ifdef PYRONIA_BENCH
+    struct timespec start, stop;
+#endif
     pthread_mutex_lock(&security_ctx_mutex);
     runtime->interpreter_lock_acquire_cb();
+#ifdef PYRONIA_BENCH
+    get_cpu_time(&start);
+#endif
     cg = runtime->collect_callstack_cb();
+#ifdef PYRONIA_BENCH
+    get_cpu_time(&stop);
+    record_callstack_gen(start, stop);
+#endif
     runtime->interpreter_lock_release_cb();
     rlog("[%s] Done collecting callstack\n", __func__);
     pthread_mutex_unlock(&security_ctx_mutex);
