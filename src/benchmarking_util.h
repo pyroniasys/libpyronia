@@ -7,6 +7,7 @@
 #define PYRONIA_BENCH_H
 
 #include <time.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -20,8 +21,8 @@ extern "C" {
     void record_priv_add(struct timespec, struct timespec);
     void record_priv_del(struct timespec, struct timespec);
     void record_memdom_creat(struct timespec, struct timespec);
-    void record_callgraph_gen(struct timespec, struct timespec);
-    void output_userspace_bench(void);
+    void record_callstack_gen(struct timespec, struct timespec);
+    void output_userspace_bench(FILE *f);
 
     void init_memdom_benchmarking(void);
     void set_cur_dom_label(char *);

@@ -87,23 +87,23 @@ void record_callstack_gen(struct timespec start, struct timespec stop) {
     pyr_ops_data->num_callstack_gens++;
 }
 
-void output_userspace_bench() {
+void output_userspace_bench(FILE *f) {
 
     if (pyr_ops_data == NULL) {
         return;
     }
 
-    printf("%d %ld,%d %ld,%d %ld,%d %ld,%d %ld,%d %ld,%d %ld,%d %ld\n",
+    fprintf(f, "%d %.2f,%d %.2f,%d %.2f,%d %.2f,%d %.2f,%d %.2f,%d %.2f,%d %.2f\n",
            pyr_ops_data->num_mallocs, pyr_ops_data->total_malloc_us,
            pyr_ops_data->num_frees, pyr_ops_data->total_free_us,
            pyr_ops_data->num_grants, pyr_ops_data->total_grant_us,
            pyr_ops_data->num_revokes, pyr_ops_data->total_revoke_us,
            pyr_ops_data->num_priv_adds, pyr_ops_data->total_priv_add_us,
            pyr_ops_data->num_priv_dels, pyr_ops_data->total_priv_del_us,
-           pyr_ops_data->num_memdom_creat,
+           pyr_ops_data->num_memdom_creats,
            pyr_ops_data->total_memdom_creat_us,
-           pyr_ops_data->num_callgraph_gens,
-           pyr_ops_data->total_callgraph_gen_us
+           pyr_ops_data->num_callstack_gens,
+           pyr_ops_data->total_callstack_gen_us
            );
 
     free(pyr_ops_data);
