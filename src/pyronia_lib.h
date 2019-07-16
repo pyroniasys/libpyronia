@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <linux/pyronia_mac.h>
 
-#define PYRONIA_BENCH // uncomment for benchmarking
+//#define PYRONIA_BENCH // uncomment for benchmarking
 
 #define PYR_INTERCEPT_PTHREAD_CREATE
 #ifdef PYR_INTERCEPT_PTHREAD_CREATE

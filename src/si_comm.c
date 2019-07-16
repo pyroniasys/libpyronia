@@ -284,7 +284,7 @@ void *pyr_recv_from_kernel(void *args) {
 	goto out;
     }
     else if (ready == 0) {
-      printf("[%s] Polling SI socket timed out. Try again\n", __func__);
+      rlog("[%s] Polling SI socket timed out. Try again\n", __func__);
     }
     else if (ready == 1) {
       struct nl_msg *new_msg = NULL;
