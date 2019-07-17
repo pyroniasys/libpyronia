@@ -9,11 +9,12 @@
 #include <stdint.h>
 #include <errno.h>
 #include <error.h>
-#include <linux/pyronia_mac.h>
 #include <memdom_lib.h>
 
 #include "pyronia_lib.h"
 #include "serialization.h"
+
+#define CALLSTACK_STR_DELIM ","
 
 static char *serialized = NULL;
 static uint32_t ser_len = 1;
@@ -25,7 +26,6 @@ static uint32_t node_count = 0;
 // "dest" string, so the serialized callstack is ordered from root to leaf.
 // Caller must memdom_free the string.
 int pyr_serialize_callstack(const char *func_fqn) {
-  //pyr_cg_node_t *cur_node;
     char *tmp_ser = NULL;
     char *delim = CALLSTACK_STR_DELIM;
     int ret = -1;

@@ -7,8 +7,6 @@
 #ifndef PYR_SERIALIZE_H
 #define PYR_SERIALIZE_H
 
-#include <linux/pyronia_mac.h>
-
 #define INT32_STR_SIZE 12
 
 int si_memdom;

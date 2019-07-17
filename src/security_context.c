@@ -14,7 +14,7 @@
 #include "util.h"
 
 int pyr_security_context_alloc(struct pyr_security_context **ctxp,
-                               pyr_cg_node_t *(*collect_callstack_cb)(void),
+                               int (*collect_callstack_cb)(void),
 			       void (*interpreter_lock_acquire_cb)(void),
 			       void (*interpreter_lock_release_cb)(void),
 			       bool is_child) {

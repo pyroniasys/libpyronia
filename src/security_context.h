@@ -33,10 +33,6 @@ struct pyr_interp_dom_alloc {
 
 typedef struct pyr_interp_dom_alloc pyr_interp_dom_alloc_t;
 
-// foward declaration
-struct pyr_cg_node;
-typedef struct pyr_cg_node pyr_cg_node_t;
-
 /* A language runtime's security context:
  * Used for pyronia-related bookkeeping */
 struct pyr_security_context {
@@ -51,7 +47,7 @@ struct pyr_security_context {
 
     /* The function used to collect a language runtime-specific
      * callstack. This callback needs to be set at initialization time. */
-    pyr_cg_node_t *(*collect_callstack_cb)(void);
+    int (*collect_callstack_cb)(void);
     void (*interpreter_lock_acquire_cb)(void);
     void (*interpreter_lock_release_cb)(void);
 };
@@ -63,7 +59,7 @@ extern "C" {
     int pyr_new_native_lib_context(pyr_native_ctx_t **ctxp, const char *lib,
                                    pyr_native_ctx_t *next);
     int pyr_security_context_alloc(struct pyr_security_context **ctxp,
-                                   pyr_cg_node_t *(*collect_callstack_cb)(void),
+                                   int (*collect_callstack_cb)(void),
 				   void (*interpreter_lock_acquire_cb)(void),
 				   void (*interpreter_lock_release_cb)(void),
 				   bool is_child);

@@ -7,7 +7,6 @@
 #define __PYR_LIB_H
 
 #include <stdlib.h>
-#include <linux/pyronia_mac.h>
 
 //#define PYRONIA_BENCH // uncomment for benchmarking
 
@@ -22,7 +21,7 @@ extern "C" {
 
     int pyr_init(const char *main_mod_path,
 		 const char *lib_policy_file,
-                 pyr_cg_node_t *(*collect_callstack_cb)(void),
+                 int (*collect_callstack_cb)(void),
 		 void (*interpreter_lock_acquire_cb)(void),
 		 void (*interpreter_lock_release_cb)(void),
 		 int is_child);

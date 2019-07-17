@@ -13,7 +13,6 @@
 #include <pthread.h>
 #include <sys/syscall.h>
 #include <sys/mman.h>
-#include <linux/pyronia_mac.h>
 #include <smv_lib.h>
 #include <memdom_lib.h>
 
@@ -77,7 +76,7 @@ static void avl_set_space(avl_node_t *n) {
  */
 int pyr_init(const char *main_mod_path,
              const char *lib_policy_file,
-             pyr_cg_node_t *(*collect_callstack_cb)(void),
+             int (*collect_callstack_cb)(void),
              void (*interpreter_lock_acquire_cb)(void),
              void (*interpreter_lock_release_cb)(void),
 	     int is_child) {
@@ -705,8 +704,8 @@ void pyr_exit() {
 /** Wrapper around the runtime callstack collection callback
  * to be called by the si_comm component in handle_callstack_request.
  */
-pyr_cg_node_t *pyr_collect_runtime_callstack() {
-    pyr_cg_node_t *cg = NULL;
+int pyr_collect_runtime_callstack() {
+    int err = -1;
 #ifdef PYRONIA_BENCH
     struct timespec start, stop;
 #endif
@@ -715,7 +714,7 @@ pyr_cg_node_t *pyr_collect_runtime_callstack() {
 #ifdef PYRONIA_BENCH
     get_cpu_time(&start);
 #endif
-    cg = runtime->collect_callstack_cb();
+    err = runtime->collect_callstack_cb();
 #ifdef PYRONIA_BENCH
     get_cpu_time(&stop);
     record_callstack_gen(start, stop);
@@ -723,5 +722,5 @@ pyr_cg_node_t *pyr_collect_runtime_callstack() {
     runtime->interpreter_lock_release_cb();
     rlog("[%s] Done collecting callstack\n", __func__);
     pthread_mutex_unlock(&security_ctx_mutex);
-    return cg;
+    return err;
 }

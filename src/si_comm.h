@@ -8,7 +8,6 @@
 #define __PYR_KERNEL_COMM_H
 
 #include <stdbool.h>
-#include <linux/pyronia_mac.h>
 
 #define FAMILY_STR "SI_COMM"
 
@@ -24,7 +23,7 @@ extern "C" {
 #endif
 
   int pyr_init_si_comm(char *policy, bool is_child);
-    extern pyr_cg_node_t *pyr_collect_runtime_callstack(void);
+    extern int pyr_collect_runtime_callstack(void);
     void pyr_teardown_si_comm(void);
     void *pyr_recv_from_kernel(void *args);
     int pyr_callstack_req_listen(bool is_child);

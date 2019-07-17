@@ -207,7 +207,6 @@ static int pyr_handle_callstack_request(struct nl_msg *msg, void *arg) {
     struct genlmsghdr *genl_hdr = NULL;
     struct nlattr *attrs[SI_COMM_A_MAX];
     uint8_t *reqp = NULL;
-    pyr_cg_node_t *callstack = NULL;
     char *callstack_str = NULL;
     int err = -1;
 
@@ -248,7 +247,9 @@ static int pyr_handle_callstack_request(struct nl_msg *msg, void *arg) {
     }
     
     // Collect and serialize the callstack
-    callstack = pyr_collect_runtime_callstack();
+    err = pyr_collect_runtime_callstack();
+    if (err)
+      goto out;
     err = finalize_callstack_str(&callstack_str);
     if (err > 0) {
         rlog("[%s] Sending serialized callstack %s (%d bytes) to kernel\n", __func__, callstack_str, err);
