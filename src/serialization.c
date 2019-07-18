@@ -9,12 +9,11 @@
 #include <stdint.h>
 #include <errno.h>
 #include <error.h>
+#include <linux/pyronia.h>
 #include <memdom_lib.h>
 
 #include "pyronia_lib.h"
 #include "serialization.h"
-
-#define CALLSTACK_STR_DELIM ","
 
 static char *serialized = NULL;
 static uint32_t ser_len = 1;

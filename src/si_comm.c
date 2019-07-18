@@ -228,8 +228,10 @@ static int pyr_handle_callstack_request(struct nl_msg *msg, void *arg) {
     }
 
     err = genlmsg_parse(nl_hdr, 0, attrs, SI_COMM_A_MAX, si_comm_genl_policy);
-    if (err)
+    if (err) {
+      printf("[%s] Could not parse genlmsg\n", __func__);
       goto out;
+    }
     
     // ignore any attributes other than the KERN_REQ
     if (attrs[SI_COMM_A_KERN_REQ]) {
@@ -248,8 +250,10 @@ static int pyr_handle_callstack_request(struct nl_msg *msg, void *arg) {
     
     // Collect and serialize the callstack
     err = pyr_collect_runtime_callstack();
-    if (err)
+    if (err) {
+      printf("[%s] Could not collect runtime call stack\n", __func__);
       goto out;
+    }
     err = finalize_callstack_str(&callstack_str);
     if (err > 0) {
         rlog("[%s] Sending serialized callstack %s (%d bytes) to kernel\n", __func__, callstack_str, err);

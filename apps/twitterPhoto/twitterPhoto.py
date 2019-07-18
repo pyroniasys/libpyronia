@@ -14,7 +14,7 @@ tweet = ['A tweet from my pi with pyronia', 'Hello!  ']
 #while True:
 
 base_image_name = '/home/pyronia/libpyronia/testsuite/python-tests/edge.jpg'
-base_image = imread(base_image_name)
+#base_image = imread(base_image_name)
 
 #time and date for filename
 '''
