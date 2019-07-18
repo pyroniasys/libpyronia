@@ -68,7 +68,7 @@ int pyr_security_context_alloc(struct pyr_security_context **ctxp,
       c->main_path = NULL;
       // this ensures that we really do revoke write access at the end of pyr_init
       c->nested_grants = 1;
-      
+      c->verified_resources = NULL;
       /*if (!collect_callstack_cb) {
         printf("[%s] Need non-null callstack collect callback\n", __func__);
         err = -EINVAL;
@@ -134,8 +134,8 @@ void pyr_security_context_free(struct pyr_security_context **ctxp) {
     rlog("[%s] Freeing security context %p\n", __func__, c);
 
     //pyr_native_lib_context_free(&c->native_libs);
-
     free_avl_tree(&c->interp_doms);
+    c->verified_resources = NULL;
     free(c);
     rlog("[%s] Called from PID %d: %p\n", __func__, getpid(), c);
     *ctxp = NULL;

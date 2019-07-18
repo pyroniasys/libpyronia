@@ -26,6 +26,11 @@
 #include "benchmarking_util.h"
 #endif
 
+#ifdef WITH_STACK_LOGGING
+#include "policy_avl_tree.h"
+#include "stack_log.h"
+#endif
+
 static struct pyr_security_context *runtime = NULL;
 static int pyr_smv_id = -1;
 static int si_smv_id = -1;
@@ -661,7 +666,7 @@ int pyr_callstack_req_listen(bool is_child) {
       if (si_memdom_addr == NULL) {
 	goto fail;
       }
-      smv_leave_domain(si_memdom, MAIN_THREAD);
+      memdom_priv_del(si_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
     }
     smv_join_domain(si_memdom, si_smv_id);
     memdom_priv_add(si_memdom, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);
@@ -698,6 +703,9 @@ void pyr_exit() {
       if (runtime->main_path)
 	pyr_free_critical_state(runtime->main_path);
     }
+#ifdef WITH_STACK_LOGGING
+    free_pol_avl_tree(&runtime->verified_resources);
+#endif
     pyr_security_context_free(&runtime);
 }
 
@@ -724,3 +732,96 @@ int pyr_collect_runtime_callstack() {
     pthread_mutex_unlock(&security_ctx_mutex);
     return err;
 }
+
+#ifdef WITH_STACK_LOGGING
+
+/** Records a new verified resource for which the call stack
+ * is being logged.
+ */
+int record_verified_resource(const char *resource) {
+    int err = 0;
+    pthread_mutex_lock(&security_ctx_mutex);
+    runtime->verified_resources = insert_resource(resource, runtime->verified_resources);
+
+    if (runtime->verified_resources == NULL) {
+        printf("[%s] Error inserting newly verified resource %s\n", __func__, resource);
+        err = -1;
+    }
+    pthread_mutex_unlock(&security_ctx_mutex);
+    return err;
+}
+
+/** Checks if the given resource is already in the runtime's list
+ * of verified resources, and collects the call stack, if it is found
+ */
+bool check_verified_resource(const char *resource) {
+    bool contains = false;
+    pthread_mutex_lock(&security_ctx_mutex);
+    contains = contains_resource(resource, runtime->verified_resources);
+    pthread_mutex_unlock(&security_ctx_mutex);
+    return contains;
+}
+
+/** Collects the runtime's current call stack, and attaches the call stack
+ * info to the requested resource. The resulting callstack_str
+ * can then be passed on to the kernel during the normal syscall
+ * interface.
+ */
+int attach_resource_req_callstack(const char *resource,
+                                  char **callstack_str) {
+    char *cs_str = NULL, *tmp = NULL;
+    int err = -1;
+    size_t cs_str_len = 0;
+
+    pyr_is_inspecting();
+
+    // the condition will be set to false at the top of the
+    // recv loop (i.e. after this function returns)
+    pthread_mutex_lock(&security_ctx_mutex);
+    is_inspecting_stack = true;
+    pthread_mutex_unlock(&security_ctx_mutex);
+
+    // Collect and serialize the callstack
+    memdom_priv_add(si_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
+    err = pyr_collect_runtime_callstack();
+    if (err)
+        goto out;
+    err = finalize_callstack_str(&tmp);
+    if (err <= 0) {
+        err = -1;
+        goto out;
+    }
+    // copy the string over before we revoke access to the SI dom
+    cs_str = malloc(strlen(tmp)+1);
+    if (cs_str == NULL) {
+        err = -1;
+        goto out;
+    }
+    memset(cs_str, 0, strlen(tmp)+1);
+    memset(tmp, 0, MEMDOM_HEAP_SIZE); // don't forget to clear this page
+    memdom_priv_del(si_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
+
+    cs_str_len = strlen(resource)+1+strlen(cs_str)+1;
+    *callstack_str = malloc(cs_str_len);
+    if (*callstack_str == NULL) {
+        err = -1;
+        goto out;
+    }
+    memset(*callstack_str, 0, cs_str_len);
+    err = sprintf(*callstack_str, "%s#%s", resource, cs_str);
+    if (err > 0) {
+        rlog("[%s] Sending serialized callstack %s (%d bytes) to kernel\n", __func__, cs_str, err);
+        err = 0;
+    }
+
+ out:
+    if (cs_str)
+        free(cs_str);
+    pthread_mutex_lock(&security_ctx_mutex);
+    is_inspecting_stack = false;
+    pthread_cond_broadcast(&si_cond_var);
+    pthread_mutex_unlock(&security_ctx_mutex);
+    return err;
+}
+
+#endif

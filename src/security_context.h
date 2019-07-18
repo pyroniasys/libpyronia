@@ -11,6 +11,7 @@
 #include <stdbool.h>
 
 #include "memdom_avl_tree.h"
+#include "policy_avl_tree.h"
 
 #define MAX_NUM_INTERP_DOMS 250
 
@@ -45,6 +46,7 @@ struct pyr_security_context {
      * functions, let's basically keep a reference count. */
     uint32_t nested_grants;
 
+    pol_avl_node_t *verified_resources;
     /* The function used to collect a language runtime-specific
      * callstack. This callback needs to be set at initialization time. */
     int (*collect_callstack_cb)(void);

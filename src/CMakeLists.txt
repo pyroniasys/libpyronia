@@ -20,5 +20,4 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -g ${LIBNL3_CFLAGS}")
 
 add_library(pyronia SHARED memdom_avl_tree.c security_context.c serialization.c si_comm.c pyronia_lib.c benchmarking_util.c)
 
-target_link_libraries(pyronia ${LIBNL3_LIBRARIES} smv pthread) 
-
+target_link_libraries(pyronia ${LIBNL3_LIBRARIES} smv pthread)
