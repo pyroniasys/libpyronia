@@ -21,5 +21,9 @@ echo "================= Copying pyronia library to system folder: $SYSLIB ======
 sudo cp libpyronia.so /usr/lib
 sudo cp libpyronia.so /usr/lib/x86_64-linux-gnu/
 sudo cp libpyronia.so /lib/x86_64-linux-gnu/
+sudo cp libpyronia_opt.so /usr/lib
+sudo cp libpyronia_opt.so /usr/lib/x86_64-linux-gnu/
+sudo cp libpyronia_opt.so /lib/x86_64-linux-gnu/
+
 
 echo "================= Installation completed ==============================="

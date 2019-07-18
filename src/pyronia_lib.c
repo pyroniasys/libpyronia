@@ -15,6 +15,7 @@
 #include <sys/mman.h>
 #include <smv_lib.h>
 #include <memdom_lib.h>
+#include <openssl/sha.h>
 
 #include "pyronia_lib.h"
 #include "security_context.h"
@@ -29,6 +30,8 @@
 #ifdef WITH_STACK_LOGGING
 #include "policy_avl_tree.h"
 #include "stack_log.h"
+// don't collect stack for logging if true since the interp is not fully initialized yet
+static int in_init = 0; 
 #endif
 
 static struct pyr_security_context *runtime = NULL;
@@ -89,7 +92,9 @@ int pyr_init(const char *main_mod_path,
     char *policy = NULL;
     pthread_mutexattr_t attr;
 
-    is_inspecting_stack = true;
+#ifdef WITH_STACK_LOGGING
+    in_init = 1;
+#endif
     rlog("[%s] Initializing pyronia for module %s in proc %d\n", __func__, main_mod_path, getpid());
     
     // We make an exception for setup.py and the sysconfig modules
@@ -154,7 +159,7 @@ int pyr_init(const char *main_mod_path,
 	goto out;
       }
     }
-    
+    is_inspecting_stack = true;
     /* Initialize the stack inspection communication channel with
      * the kernel */
     if (!is_child) {
@@ -198,6 +203,9 @@ int pyr_init(const char *main_mod_path,
     else {
       pyr_exit();
     }
+#ifdef WITH_STACK_LOGGING
+    in_init = 0;
+#endif
     return err;
 }
 
@@ -757,32 +765,42 @@ int record_verified_resource(const char *resource) {
 bool check_verified_resource(const char *resource) {
     bool contains = false;
     pthread_mutex_lock(&security_ctx_mutex);
+    if (!runtime || in_init)
+      goto out;
     contains = contains_resource(resource, runtime->verified_resources);
+    printf("[%s] Logged resource %s? %s\n", __func__, resource,
+	   (contains ? "yes" : "no"));
+ out:
     pthread_mutex_unlock(&security_ctx_mutex);
     return contains;
 }
 
-/** Collects the runtime's current call stack, and attaches the call stack
- * info to the requested resource. The resulting callstack_str
+/** Collects the runtime's current call stack, and computes the SHA256
+ * hash. The resulting callstack_hash
  * can then be passed on to the kernel during the normal syscall
  * interface.
  */
-int attach_resource_req_callstack(const char *resource,
-                                  char **callstack_str) {
-    char *cs_str = NULL, *tmp = NULL;
+int compute_callstack_hash(const char *resource,
+			    unsigned char **callstack_hash) {
+    char *tmp = NULL;
     int err = -1;
     size_t cs_str_len = 0;
+    unsigned char *hash = NULL;
+    char cs_str[512];
 
-    pyr_is_inspecting();
-
+    if (!runtime || in_init)
+      goto out;
+    
     // the condition will be set to false at the top of the
     // recv loop (i.e. after this function returns)
     pthread_mutex_lock(&security_ctx_mutex);
-    is_inspecting_stack = true;
+    if (!is_inspecting_stack)
+      is_inspecting_stack = true;
     pthread_mutex_unlock(&security_ctx_mutex);
 
     // Collect and serialize the callstack
     memdom_priv_add(si_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
+    rlog("[%s] Collecting call stack for requested resource %s\n", __func__, resource);
     err = pyr_collect_runtime_callstack();
     if (err)
         goto out;
@@ -792,31 +810,26 @@ int attach_resource_req_callstack(const char *resource,
         goto out;
     }
     // copy the string over before we revoke access to the SI dom
-    cs_str = malloc(strlen(tmp)+1);
-    if (cs_str == NULL) {
-        err = -1;
-        goto out;
-    }
     memset(cs_str, 0, strlen(tmp)+1);
+    strcpy(cs_str, tmp);
     memset(tmp, 0, MEMDOM_HEAP_SIZE); // don't forget to clear this page
     memdom_priv_del(si_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
+    rlog("[%s] Sending callstack %s (%d bytes) to kernel\n", __func__, cs_str, strlen(cs_str));
+    
+    // compute the SHA 256 hash of the callstack string;
+    // do it after copying it into this space, so OPENSSL doesn't acces
+    // the SI memdom
+    hash = malloc(SHA256_DIGEST_LENGTH);
+    if (!hash)
+      goto out;
 
-    cs_str_len = strlen(resource)+1+strlen(cs_str)+1;
-    *callstack_str = malloc(cs_str_len);
-    if (*callstack_str == NULL) {
-        err = -1;
-        goto out;
-    }
-    memset(*callstack_str, 0, cs_str_len);
-    err = sprintf(*callstack_str, "%s#%s", resource, cs_str);
-    if (err > 0) {
-        rlog("[%s] Sending serialized callstack %s (%d bytes) to kernel\n", __func__, cs_str, err);
-        err = 0;
-    }
-
+    hash = SHA256((const unsigned char *)cs_str, strlen(cs_str), hash);
+    int test = (int)hash;
+    printf("test: %d %lu %lu\n", test, (size_t)hash, (size_t)test);
+    *callstack_hash = hash;
+    err = 0;
  out:
-    if (cs_str)
-        free(cs_str);
+    memset(cs_str, 0, 512);
     pthread_mutex_lock(&security_ctx_mutex);
     is_inspecting_stack = false;
     pthread_cond_broadcast(&si_cond_var);

@@ -11,6 +11,7 @@
 
 int record_verified_resource(const char *resource);
 bool check_verified_resource(const char *resource);
-int attach_resource_req_callstack(const char *resource, char **callstack_str);
+int compute_callstack_hash(const char *resource,
+			   unsigned char **callstack_hash);
 
 #endif /* PYR_STACK_LOG_H */
