@@ -768,7 +768,7 @@ bool check_verified_resource(const char *resource) {
     if (!runtime || in_init)
       goto out;
     contains = contains_resource(resource, runtime->verified_resources);
-    printf("[%s] Logged resource %s? %s\n", __func__, resource,
+    rlog("[%s] Logged resource %s? %s\n", __func__, resource,
 	   (contains ? "yes" : "no"));
  out:
     pthread_mutex_unlock(&security_ctx_mutex);
@@ -824,8 +824,6 @@ int compute_callstack_hash(const char *resource,
       goto out;
 
     hash = SHA256((const unsigned char *)cs_str, strlen(cs_str), hash);
-    int test = (int)hash;
-    printf("test: %d %lu %lu\n", test, (size_t)hash, (size_t)test);
     *callstack_hash = hash;
     err = 0;
  out:

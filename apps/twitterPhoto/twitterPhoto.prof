@@ -11,6 +11,7 @@
 /etc/mime.types rm,
 /etc/nsswitch.conf rm,
 /etc/host.conf rm,
+/etc/ssl/openssl.cnf r,
 /run/resolvconf/resolv.conf r,
 /run/systemd/resolve/stub-resolv.conf r,
 /etc/hosts r,
