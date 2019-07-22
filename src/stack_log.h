@@ -9,9 +9,19 @@
 
 #include <stdbool.h>
 
+#define SHA256_DIGEST_SIZE 32
+
+struct pyr_userspace_stack_hash {
+    union {
+        const char *filename;
+        const struct sockaddr *addr;
+    } resource;
+    int includes_stack;
+    unsigned char hash[SHA256_DIGEST_SIZE];
+};
+
 int record_verified_resource(const char *resource);
 bool check_verified_resource(const char *resource);
-int compute_callstack_hash(const char *resource,
-			   unsigned char **callstack_hash);
+int compute_callstack_hash(unsigned char **callstack_hash);
 
 #endif /* PYR_STACK_LOG_H */

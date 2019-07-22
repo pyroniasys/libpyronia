@@ -74,22 +74,30 @@ FILE *fopen(const char *pathname, const char *mode) {
     int err = -1;
     unsigned char *hash = NULL;
     bool is_logged = false;
+    struct pyr_userspace_stack_hash uh;
 
     // check to see if the requested pathname has already been verified
     is_logged = check_verified_resource(pathname);
-    if (!is_logged) {
-        err = compute_callstack_hash(pathname, &hash);
+    if (is_logged) {
+        err = compute_callstack_hash(&hash);
     }
 
+    uh.resource.filename = pathname;
+    uh.includes_stack = 0;
     if (!err && hash) {
-        print_hash(hash);
-        f = real_fopen(pathname, mode);
-    }
-    else {
-        // normal open
-        f = real_fopen(pathname, mode);
+	uh.includes_stack = 1;
+	memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
+	//print_hash(uh.hash);
     }
 
+    rlog("[%s] Passing call stack %p for %s? %s\n", __func__, &uh, uh.resource.filename, (uh.includes_stack ? "yes" : "no"));
+    f = real_fopen((const char *)&uh, mode);
+
+    // syscall succeeded, so record the resource as verified
+    if (f != NULL) {
+      err = record_verified_resource(pathname);
+    }
+    
     // the SI thread will take care of logging if the kernel
     // verifies the stack for this pathname
     if (hash)
@@ -98,7 +106,7 @@ FILE *fopen(const char *pathname, const char *mode) {
 }
 
 // TODO: move this to uapi/linux/pyronia.h
-static void in_addr_to_str(const struct sockaddr *sa, const char**addr_str)
+static void in_addr_to_str(const struct sockaddr *sa, char *addr_str)
 {
     int in_addr = 0, printed_bytes = 0;
     char ip_str[INET_ADDRSTRLEN+1];
@@ -117,11 +125,10 @@ static void in_addr_to_str(const struct sockaddr *sa, const char**addr_str)
                                  ((in_addr & 0xFF000000) >> 24));
 
         if (printed_bytes > sizeof(ip_str)) {
-            *addr_str = NULL;
             return;
         }
 
-        *addr_str = ip_str;
+        strcpy(addr_str, ip_str);
     }
     else if (sa->sa_family == AF_INET6) {
         // Support IPv6 addresses
@@ -137,17 +144,16 @@ static void in_addr_to_str(const struct sockaddr *sa, const char**addr_str)
 				 (s6_addrp[12] | s6_addrp[13]),
 				 (s6_addrp[14] | s6_addrp[15]));
         if (printed_bytes > sizeof(ip6_str)) {
-            *addr_str = NULL;
             return;
         }
 
-        *addr_str = ip6_str;
+        strcpy(addr_str, ip6_str);
     }
     else if (sa->sa_family == AF_NETLINK) {
-      *addr_str  = "netlink";
+      strcpy(addr_str, "netlink\0");
     }
     else {
-      *addr_str  = "unknown";
+      strcpy(addr_str, "unknown\0");
     }
 }
 
@@ -159,32 +165,45 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     int err = -1;
     unsigned char *hash = NULL;
     bool is_logged = false;
-    const char *addr_str = NULL;
+    char addr_str[INET6_ADDRSTRLEN+1];
+    struct pyr_userspace_stack_hash uh;
 
-    in_addr_to_str(addr, &addr_str);
-    if (addr_str == NULL) {
+    memset(addr_str, 0, INET6_ADDRSTRLEN+1);
+    in_addr_to_str(addr, addr_str);
+    if (addr_str[0] == '\0') {
       errno = EADDRNOTAVAIL; // is this the best errno for this case?
       goto out;
     }
     
     // check to see if the requested IP address has already been verified
     is_logged = check_verified_resource(addr_str);
-    if (!is_logged) {
-        err = compute_callstack_hash(addr_str, &hash);
+    if (is_logged) {
+        err = compute_callstack_hash(&hash);
     }
 
+    rlog("[%s] Got sockaddr for %s\n", __func__, addr_str);
+
+    uh.resource.addr = addr;
+    uh.includes_stack = 0;
     if (!err && hash) {
-        print_hash(hash);
-        err = real_connect(sockfd, addr, addrlen);
+	uh.includes_stack = 1;
+	memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
+	//print_hash(uh.hash);
     }
-    else {
-        // normal connect
-        err = real_connect(sockfd, addr, addrlen);
-    }
+    rlog("[%s] Passing call stack for %s? %s\n", __func__, addr_str, (uh.includes_stack ? "yes" : "no"));
+    
+    err = real_connect(sockfd, (const struct sockaddr *)&uh, addrlen);
 
+    // syscall succeeded, so record the resource as verified
+    if (err == 0) {
+      err = record_verified_resource(addr_str);
+      rlog("[%s] syscall succeeded\n", __func__);
+    }
+    
     // the SI thread will take care of logging if the kernel
     // verifies the stack for this pathname
  out:
+    memset(addr_str, 0, INET6_ADDRSTRLEN+1);
     if (hash)
       free(hash);
   return err;

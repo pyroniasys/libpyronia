@@ -154,4 +154,6 @@ if __name__ == "__main__":
         GPIO.output(lights[0], GPIO.LOW)
     start()
     '''
-    alexa()
+    for x in range (0, 2):
+        alexa()
+        time.sleep(2)

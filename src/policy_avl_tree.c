@@ -22,7 +22,7 @@ void free_pol_avl_tree(pol_avl_node_t** root) {
     if (rootp->right != NULL)
         free_pol_avl_tree(&rootp->right);
     if (rootp->verified_resource)
-        free(&rootp->verified_resource);
+        free(rootp->verified_resource);
 
     free(rootp);
     *root = NULL;

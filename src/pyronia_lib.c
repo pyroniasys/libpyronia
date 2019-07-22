@@ -31,7 +31,7 @@
 #include "policy_avl_tree.h"
 #include "stack_log.h"
 // don't collect stack for logging if true since the interp is not fully initialized yet
-static int in_init = 0; 
+static int in_init = 1; 
 #endif
 
 static struct pyr_security_context *runtime = NULL;
@@ -168,7 +168,10 @@ int pyr_init(const char *main_mod_path,
 	printf("[%s] SI comm channel initialization failed\n", __func__);
 	goto out;
       }
-
+#ifdef WITH_STACK_LOGGING
+      in_init = 0;
+#endif
+      
       //PyEval_InitThreads(); // needed to enable stack inspector
 
       err = pyr_callstack_req_listen(is_child);
@@ -780,8 +783,7 @@ bool check_verified_resource(const char *resource) {
  * can then be passed on to the kernel during the normal syscall
  * interface.
  */
-int compute_callstack_hash(const char *resource,
-			    unsigned char **callstack_hash) {
+int compute_callstack_hash(unsigned char **callstack_hash) {
     char *tmp = NULL;
     int err = -1;
     size_t cs_str_len = 0;
@@ -800,7 +802,6 @@ int compute_callstack_hash(const char *resource,
 
     // Collect and serialize the callstack
     memdom_priv_add(si_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
-    rlog("[%s] Collecting call stack for requested resource %s\n", __func__, resource);
     err = pyr_collect_runtime_callstack();
     if (err)
         goto out;
@@ -824,9 +825,9 @@ int compute_callstack_hash(const char *resource,
       goto out;
 
     hash = SHA256((const unsigned char *)cs_str, strlen(cs_str), hash);
-    *callstack_hash = hash;
     err = 0;
  out:
+    *callstack_hash = hash;
     memset(cs_str, 0, 512);
     pthread_mutex_lock(&security_ctx_mutex);
     is_inspecting_stack = false;
