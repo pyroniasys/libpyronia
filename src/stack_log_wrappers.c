@@ -19,6 +19,10 @@
 #include <smv_lib.h>
 #include "stack_log.h"
 
+#ifdef PYR_SYSCALL_BENCH
+#include "benchmarking_util.h"
+#endif
+
 typedef int(*real_open_t)(const char *, int, mode_t);
 typedef FILE *(*real_fopen_t)(const char *, const char *);
 typedef int(*real_connect_t)(int, const struct sockaddr *, socklen_t);
@@ -39,6 +43,11 @@ int real_open(const char *pathname, int flags, mode_t mode) {
 
 int open(const char *pathname, int flags, mode_t mode) {
     int fd = -1;
+#ifdef PYR_SYSCALL_BENCH
+    struct timespec start, stop;
+    get_cpu_time(&start);
+#endif
+#ifdef WITH_STACK_LOGGING
     int err = -1;
     unsigned char *hash = NULL;
     bool is_logged = false;
@@ -54,12 +63,12 @@ int open(const char *pathname, int flags, mode_t mode) {
     uh.includes_stack = 0;
     if (!err && hash) {
       //print_hash(hash);
-      	uh.includes_stack = 1;
-	memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
+        uh.includes_stack = 1;
+        memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
     }
 
     rlog("[%s] Passing call stack %p for %s? %s\n", __func__, &uh, uh.resource.filename, (uh.includes_stack ? "yes" : "no"));
-    
+
     fd = real_open((const char *)&uh, flags, mode);
     if (fd != -1) {
       err = record_verified_resource(pathname);
@@ -70,6 +79,13 @@ int open(const char *pathname, int flags, mode_t mode) {
     // verifies the stack for this pathname
     if (hash)
       free(hash);
+#else
+    fd = real_open(pathname, flags, mode);
+#endif
+#ifdef PYR_SYSCALL_BENCH
+    get_cpu_time(&stop);
+    record_open(start, stop);
+#endif
   return fd;
 }
 
@@ -79,6 +95,11 @@ int real_open64(const char *pathname, int flags, mode_t mode) {
 
 int open64(const char *pathname, int flags, mode_t mode) {
     int fd = -1;
+#ifdef PYR_SYSCALL_BENCH
+    struct timespec start, stop;
+    get_cpu_time(&start);
+#endif
+#ifdef WITH_STACK_LOGGING
     int err = -1;
     unsigned char *hash = NULL;
     bool is_logged = false;
@@ -94,12 +115,12 @@ int open64(const char *pathname, int flags, mode_t mode) {
     uh.includes_stack = 0;
     if (!err && hash) {
       //print_hash(hash);
-      	uh.includes_stack = 1;
-	memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
+        uh.includes_stack = 1;
+        memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
     }
 
     rlog("[%s] Passing call stack %p for %s? %s\n", __func__, &uh, uh.resource.filename, (uh.includes_stack ? "yes" : "no"));
-    
+
     fd = real_open64((const char *)&uh, flags, mode);
     if (fd != -1) {
       err = record_verified_resource(pathname);
@@ -110,6 +131,13 @@ int open64(const char *pathname, int flags, mode_t mode) {
     // verifies the stack for this pathname
     if (hash)
       free(hash);
+#else
+    f = real_open64(pathname, flags, mode);
+#endif
+#ifdef PYR_SYSCALL_BENCH
+    get_cpu_time(&stop);
+    record_open(start, stop);
+#endif
   return fd;
 }
 
@@ -120,13 +148,18 @@ FILE *real_fopen(const char *pathname, const char *mode) {
 // wrapper around basic open
 FILE *fopen(const char *pathname, const char *mode) {
     FILE *f = NULL;
+#ifdef PYR_SYSCALL_BENCH
+    struct timespec start, stop;
+    get_cpu_time(&start);
+#endif
+#ifdef WITH_STACK_LOGGING
     int err = -1;
     unsigned char *hash = NULL;
     bool is_logged = false;
     struct pyr_userspace_stack_hash uh;
 
     rlog("[%s] pathname: %s\n", __func__, pathname);
-    
+
     // check to see if the requested pathname has already been verified
     is_logged = check_verified_resource(pathname);
     if (is_logged) {
@@ -136,9 +169,9 @@ FILE *fopen(const char *pathname, const char *mode) {
     uh.resource.filename = pathname;
     uh.includes_stack = 0;
     if (!err && hash) {
-	uh.includes_stack = 1;
-	memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
-	//print_hash(uh.hash);
+        uh.includes_stack = 1;
+        memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
+        //print_hash(uh.hash);
     }
 
     rlog("[%s] Passing call stack %p for %s? %s\n", __func__, &uh, uh.resource.filename, (uh.includes_stack ? "yes" : "no"));
@@ -148,11 +181,18 @@ FILE *fopen(const char *pathname, const char *mode) {
     if (f != NULL) {
       err = record_verified_resource(pathname);
     }
-    
+
     // the SI thread will take care of logging if the kernel
     // verifies the stack for this pathname
     if (hash)
       free(hash);
+#else
+    f = real_fopen(pathname, mode);
+#endif
+#ifdef PYR_SYSCALL_BENCH
+    get_cpu_time(&stop);
+    record_fopen(start, stop);
+#endif
   return f;
 }
 
@@ -163,13 +203,18 @@ FILE *real_fopen64(const char *pathname, const char *mode) {
 // wrapper around basic open
 FILE *fopen64(const char *pathname, const char *mode) {
     FILE *f = NULL;
+#ifdef PYR_SYSCALL_BENCH
+    struct timespec start, stop;
+    get_cpu_time(&start);
+#endif
+#ifdef WITH_STACK_LOGGING
     int err = -1;
     unsigned char *hash = NULL;
     bool is_logged = false;
     struct pyr_userspace_stack_hash uh;
 
     rlog("[%s] pathname: %s\n", __func__, pathname);
-    
+
     // check to see if the requested pathname has already been verified
     is_logged = check_verified_resource(pathname);
     if (is_logged) {
@@ -179,9 +224,9 @@ FILE *fopen64(const char *pathname, const char *mode) {
     uh.resource.filename = pathname;
     uh.includes_stack = 0;
     if (!err && hash) {
-	uh.includes_stack = 1;
-	memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
-	//print_hash(uh.hash);
+        uh.includes_stack = 1;
+        memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
+        //print_hash(uh.hash);
     }
 
     rlog("[%s] Passing call stack %p for %s? %s\n", __func__, &uh, uh.resource.filename, (uh.includes_stack ? "yes" : "no"));
@@ -191,11 +236,18 @@ FILE *fopen64(const char *pathname, const char *mode) {
     if (f != NULL) {
       err = record_verified_resource(pathname);
     }
-    
+
     // the SI thread will take care of logging if the kernel
     // verifies the stack for this pathname
     if (hash)
       free(hash);
+#else
+    f = real_fopen64(pathname, mode);
+#endif
+#ifdef PYR_SYSCALL_BENCH
+    get_cpu_time(&stop);
+    record_fopen(start, stop);
+#endif
   return f;
 }
 
@@ -207,11 +259,11 @@ static void in_addr_to_str(const struct sockaddr *sa, char *addr_str)
     char ip6_str[INET6_ADDRSTRLEN+1];
 
     // TODO: we might get a junk address, so fail gracefully
-    
+
     if (sa->sa_family == AF_INET) {
         in_addr = (int)((struct sockaddr_in*)sa)->sin_addr.s_addr;
 
-	memset(ip_str, 0, INET_ADDRSTRLEN+1);
+        memset(ip_str, 0, INET_ADDRSTRLEN+1);
         printed_bytes = snprintf(ip_str, INET_ADDRSTRLEN, "%d.%d.%d.%d",
                                  (in_addr & 0xFF),
                                  ((in_addr & 0xFF00) >> 8),
@@ -226,17 +278,17 @@ static void in_addr_to_str(const struct sockaddr *sa, char *addr_str)
     }
     else if (sa->sa_family == AF_INET6) {
         // Support IPv6 addresses
-	unsigned char *s6_addrp = ((struct sockaddr_in6*)sa)->sin6_addr.s6_addr; 
-	memset(ip6_str, 0, INET6_ADDRSTRLEN+1);
-	printed_bytes = snprintf(ip6_str, INET6_ADDRSTRLEN, "%x:%x:%x:%x:%x:%x:%x:%x",
-				 (s6_addrp[0] | s6_addrp[1]),
-				 (s6_addrp[2] | s6_addrp[3]),
-				 (s6_addrp[4] | s6_addrp[5]),
-				 (s6_addrp[6] | s6_addrp[7]),
-				 (s6_addrp[8] | s6_addrp[9]),
-				 (s6_addrp[10] | s6_addrp[11]),
-				 (s6_addrp[12] | s6_addrp[13]),
-				 (s6_addrp[14] | s6_addrp[15]));
+        unsigned char *s6_addrp = ((struct sockaddr_in6*)sa)->sin6_addr.s6_addr;
+        memset(ip6_str, 0, INET6_ADDRSTRLEN+1);
+        printed_bytes = snprintf(ip6_str, INET6_ADDRSTRLEN, "%x:%x:%x:%x:%x:%x:%x:%x",
+                                 (s6_addrp[0] | s6_addrp[1]),
+                                 (s6_addrp[2] | s6_addrp[3]),
+                                 (s6_addrp[4] | s6_addrp[5]),
+                                 (s6_addrp[6] | s6_addrp[7]),
+                                 (s6_addrp[8] | s6_addrp[9]),
+                                 (s6_addrp[10] | s6_addrp[11]),
+                                 (s6_addrp[12] | s6_addrp[13]),
+                                 (s6_addrp[14] | s6_addrp[15]));
         if (printed_bytes > sizeof(ip6_str)) {
             return;
         }
@@ -257,6 +309,11 @@ int real_connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 
 int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     int err = -1;
+#ifdef PYR_SYSCALL_BENCH
+    struct timespec start, stop;
+    get_cpu_time(&start);
+#endif
+#ifdef WITH_STACK_LOGGING
     unsigned char *hash = NULL;
     bool is_logged = false;
     char addr_str[INET6_ADDRSTRLEN+1];
@@ -268,7 +325,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
       errno = EADDRNOTAVAIL; // is this the best errno for this case?
       goto out;
     }
-    
+
     // check to see if the requested IP address has already been verified
     is_logged = check_verified_resource(addr_str);
     if (is_logged) {
@@ -280,12 +337,12 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     uh.resource.addr = addr;
     uh.includes_stack = 0;
     if (!err && hash) {
-	uh.includes_stack = 1;
-	memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
-	//print_hash(uh.hash);
+        uh.includes_stack = 1;
+        memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
+        //print_hash(uh.hash);
     }
     rlog("[%s] Passing call stack for %s? %s\n", __func__, addr_str, (uh.includes_stack ? "yes" : "no"));
-    
+
     err = real_connect(sockfd, (const struct sockaddr *)&uh, addrlen);
 
     // syscall succeeded, so record the resource as verified
@@ -293,11 +350,18 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
       err = record_verified_resource(addr_str);
       rlog("[%s] syscall succeeded\n", __func__);
     }
-    
+
  out:
     memset(addr_str, 0, INET6_ADDRSTRLEN+1);
     if (hash)
       free(hash);
+#else
+    err = real_connect(sockfd, addr, addrlen);
+#endif
+#ifdef PYR_SYSCALL_BENCH
+    get_cpu_time(&stop);
+    record_connect(start, stop);
+#endif
   return err;
 }
 
@@ -319,7 +383,7 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
       errno = EADDRNOTAVAIL; // is this the best errno for this case?
       goto out;
     }
-    
+
     // check to see if the requested IP address has already been verified
     is_logged = check_verified_resource(addr_str);
     if (is_logged) {
@@ -337,22 +401,22 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
       uh.resource.addr = addr;
       uh.includes_stack = 0;
       if (!err && hash) {
-	//print_hash(hash);
-	uh.includes_stack = 1;
-	memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
+        //print_hash(hash);
+        uh.includes_stack = 1;
+        memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
       }
-      
+
       printf("[%s] Passing call stack for %s? %s\n", __func__, addr_str, (uh.includes_stack ? "yes" : "no"));
-      
+
       err = real_bind(sockfd, (const struct sockaddr *)&uh, addrlen);
-      
+
       // syscall succeeded, so record the resource as verified
       if (err == 0) {
-	err = record_verified_resource(addr_str);
-	rlog("[%s] syscall succeeded\n", __func__);
+        err = record_verified_resource(addr_str);
+        rlog("[%s] syscall succeeded\n", __func__);
       }
       else {
-	perror("[bind]");
+        perror("[bind]");
       }
     }
  out:

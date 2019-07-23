@@ -39,6 +39,9 @@ int memdom_create(){
   #ifdef INTERCEPT_MALLOC
 #define malloc(sz) memdom_alloc(memdom_private_id(), sz)
   #endif
+#ifdef MEMDOM_BENCH
+  record_memdom_metadata_alloc(sizeof(struct memdom_metadata_struct));
+#endif
   memdom[memdom_id]->memdom_id = memdom_id;
   memdom[memdom_id]->start = NULL; // memdom_alloc will do the actual mmap
   memdom[memdom_id]->total_size = MEMDOM_HEAP_SIZE;
@@ -47,10 +50,6 @@ int memdom_create(){
   memdom[memdom_id]->allocs = NULL;
   memdom[memdom_id]->cur_alloc = 0;
   memdom[memdom_id]->peak_alloc = 0;
-#ifdef PYR_MEMDOM_BENCH
-  memdom[memdom_id]->metadata_peak = sizeof(struct memdom_metadata_struct);
-  memdom[memdom_id]->metadata_cur = sizeof(struct memdom_metadata_struct);
-#endif
   pthread_mutex_init(&memdom[memdom_id]->mlock, NULL);
 
   return memdom_id;
@@ -93,6 +92,9 @@ int memdom_kill(int memdom_id){
     free_list = free_list->next;
     rlog("freeing free_list %p addr: %p, size: %lu bytes\n", tmp, tmp->addr, tmp->size);
     free(tmp);
+#ifdef MEMDOM_BENCH
+    record_memdom_metadata_free(sizeof(struct alloc_metadata));
+#endif
   }
 
   /* Free any remaining allocated alloc_metadata in this memdom */
@@ -102,10 +104,16 @@ int memdom_kill(int memdom_id){
     free_list = free_list->next;
     rlog("freeing remaining allocated block %p at addr: %p, size: %lu bytes\n", tmp, tmp->addr, tmp->size);
     free(tmp);
+#ifdef MEMDOM_BENCH
+    record_memdom_metadata_free(sizeof(struct alloc_metadata));
+#endif
   }
 
   /* Free memdom metadata */
   free(memdom[memdom_id]);
+#ifdef MEMDOM_BENCH
+  record_memdom_metadata_free(sizeof(struct memdom_metadata_struct));
+#endif
 
   /* Send kill memdom info to kernel */
   sprintf(buf, "memdom,kill,%d", memdom_id);
@@ -324,8 +332,8 @@ void free_list_insert(int memdom_id, struct alloc_metadata *new_free){
 	new_free->size += cur->size;
 	new_free->next = cur->next;
 	free(cur);
-#ifdef PYR_MEMDOM_BENCH
-	memdom[memdom_id]->metadata_cur -= sizeof(struct alloc_metadata);
+#ifdef MEMDOM_BENCH
+	record_memdom_metadata_free(sizeof(struct alloc_metadata));
 #endif
 	cur = new_free;
 	rlog("[%s] Merging free chunk %p with current in memdom %d\n", __func__, new_free->addr, memdom_id);
@@ -347,8 +355,8 @@ void free_list_insert(int memdom_id, struct alloc_metadata *new_free){
 	  prev->size += new_free->size;
 	  prev->next = new_free->next;
 	  free(new_free);
-#ifdef PYR_MEMDOM_BENCH
-	memdom[memdom_id]->metadata_cur -= sizeof(struct alloc_metadata);
+#ifdef MEMDOM_BENCH
+          record_memdom_metadata_free(sizeof(struct alloc_metadata));
 #endif
 	  cur = prev;
 
@@ -369,8 +377,8 @@ void free_list_insert(int memdom_id, struct alloc_metadata *new_free){
 	cur->size += new_free->size;
 	cur->next = new_free->next;
 	free(new_free);
-#ifdef PYR_MEMDOM_BENCH
-	memdom[memdom_id]->metadata_cur -= sizeof(struct alloc_metadata);
+#ifdef MEMDOM_BENCH
+	record_memdom_metadata_free(sizeof(struct alloc_metadata));
 #endif
 
 	rlog("[%s] Merging free chunk in memdom %d with current\n", __func__, memdom_id);
@@ -428,10 +436,8 @@ void free_list_init(int memdom_id){
   struct alloc_metadata *new_free_list;
   
   new_free_list = alloc_metadata_init(memdom[memdom_id]->start, memdom[memdom_id]->total_size);
-#ifdef PYR_MEMDOM_BENCH
-  memdom[memdom_id]->metadata_cur += sizeof(struct alloc_metadata);
-  if (memdom[memdom_id]->metadata_cur > memdom[memdom_id]->metadata_peak)
-    memdom[memdom_id]->metadata_peak = memdom[memdom_id]->metadata_cur;
+#ifdef MEMDOM_BENCH
+    record_memdom_metadata_alloc(sizeof((struct alloc_metadata));
 #endif
   memdom[memdom_id]->free_list_head = NULL;   // reclaimed chunk are inserted to head
   memdom[memdom_id]->free_list_tail = new_free_list;
@@ -511,16 +517,18 @@ void *memdom_alloc(int memdom_id, unsigned long sz){
     /* Last chunk is now allocated, tail is not available from now */
     if( free_list->size == 0 ) {
       free(free_list);
+#ifdef MEMDOM_BENCH
+      record_memdom_metadata_free(sizeof((struct alloc_metadata));
+#endif
+      
       memdom[memdom_id]->free_list_tail = NULL;
       rlog("[%s] free_list size is 0, freed this alloc_metadata, the next allocate should request from free_list_head\n", __func__);
     }
     new_alloc = alloc_metadata_init(memblock, sz);
-    allocs_insert_to_head(memdom_id, new_alloc);
-#ifdef PYR_MEMDOM_BENCH
-    memdom[memdom_id]->metadata_cur += sizeof(struct alloc_metadata);
-    if (memdom[memdom_id]->metadata_cur > memdom[memdom_id]->metadata_peak)
-      memdom[memdom_id]->metadata_peak = memdom[memdom_id]->metadata_cur;
+#ifdef MEMDOM_BENCH
+    record_memdom_metadata_alloc(sizeof((struct alloc_metadata));
 #endif
+    allocs_insert_to_head(memdom_id, new_alloc);
     goto out;
   }
 
@@ -564,10 +572,8 @@ void *memdom_alloc(int memdom_id, unsigned long sz){
         new_alloc = alloc_metadata_init(memblock, sz);
 	rlog("[%s] Adjust free list to addr %p, sz %lu\n",
 	     __func__, free_list->addr, free_list->size);
-#ifdef PYR_MEMDOM_BENCH
-	memdom[memdom_id]->metadata_cur += sizeof(struct alloc_metadata);
-	if (memdom[memdom_id]->metadata_cur > memdom[memdom_id]->metadata_peak)
-	  memdom[memdom_id]->metadata_peak = memdom[memdom_id]->metadata_cur;
+#ifdef MEMDOM_BENCH
+        record_memdom_metadata_alloc(sizeof((struct alloc_metadata));
 #endif
       }
       allocs_insert_to_head(memdom_id, new_alloc);
@@ -665,11 +671,3 @@ unsigned long memdom_get_free_bytes(int memdom_id) {
         return 0;
     return memdom[memdom_id]->total_size - memdom[memdom_id]->cur_alloc;
 }
-
-#ifdef PYR_MEMDOM_BENCH
-unsigned long memdom_get_peak_metadata_alloc(int memdom_id) {
-  if (!memdom[memdom_id])
-        return 0;
-  return memdom[memdom_id]->metadata_peak;
-}
-#endif

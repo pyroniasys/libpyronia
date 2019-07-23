@@ -116,6 +116,9 @@ static int read_policy_file(const char *policy_fname, char **buf) {
 	  printf("[%s] Could not allocate the protected buffer\n", __func__);
             goto fail;
         }
+#ifdef MEMDOM_BENCH
+        record_internal_malloc(length+1);
+#endif
         read = fread(buffer, 1, length, f);
         if (read != length) {
           printf("[%s] Bad read length: %d != %d\n", __func__, read, length);
@@ -130,8 +133,12 @@ static int read_policy_file(const char *policy_fname, char **buf) {
         printf("[%s] Could not open the lib policy file %s\n", __func__, policy_fname);
     }
  fail:
-    if (buffer)
+    if (buffer) {
+#ifdef MEMDOM_BENCH
+        record_internal_free(length+1);
+#endif
         pyr_free_critical_state(buffer);
+    }
     if (f)
         fclose(f);
     *buf = NULL;
@@ -149,11 +156,13 @@ int pyr_parse_lib_policy(const char *policy_fname, char **parsed) {
     int ret;
 
     char *policy;
+    size_t policy_len = 0;
     char *policyp;
     ret = read_policy_file(policy_fname, &policy);
     if (ret < 0) {
         goto fail;
     }
+    policy_len = ret;
     policyp = policy;
     
     // loop through the policy to serialize it into
@@ -168,6 +177,9 @@ int pyr_parse_lib_policy(const char *policy_fname, char **parsed) {
       
 	rule_len = strlen(next_rule);
 	tmp_ser = realloc(ser, ser_len+rule_len);
+#ifdef MEMDOM_BENCH
+        record_internal_malloc(ser_len+rule_len);
+#endif
 	if (!tmp_ser) {
 	  ret = -1;
 	  goto fail;
@@ -201,6 +213,9 @@ int pyr_parse_lib_policy(const char *policy_fname, char **parsed) {
         ret = -1;
         goto fail;
     }
+#ifdef MEMDOM_BENCH
+    record_internal_malloc(strlen(ser)+INT32_STR_SIZE+2);
+#endif
     memset(out, 0, strlen(ser)+INT32_STR_SIZE+2);
     ret = sprintf(out, "%d,%s", count, ser);
     goto done;
@@ -209,10 +224,18 @@ int pyr_parse_lib_policy(const char *policy_fname, char **parsed) {
     out = NULL;
     
  done:
-    if (policyp)
+    if (policyp) {
+#ifdef MEMDOM_BENCH
+        record_internal_free(policy_len);
+#endif
       pyr_free_critical_state(policyp);
-    if (ser)
+    }
+    if (ser) {
+#ifdef MEMDOM_BENCH
+        record_internal_free(strlen(ser)+1);
+#endif
         free(ser);
+    }
     *parsed = out;
     return ret;
 }

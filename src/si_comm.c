@@ -321,6 +321,9 @@ static int open_si_socket() {
     rlog("[%s] Could not allocate SI netlink socket\n", __func__);
     return -1;
   }
+#ifdef MEMDOM_BENCH
+  record_internal_malloc(sizeof(struct nl_sock));
+#endif
   nl_socket_disable_seq_check(si_sock);
   nl_socket_disable_auto_ack(si_sock);
   
@@ -337,8 +340,12 @@ static int open_si_socket() {
 
  fail:
   printf("{%s] Following libnl error occurred: %s\n", __func__, nl_geterror(err));
-  if (si_sock)
+  if (si_sock) {
+#ifdef MEMDOM_BENCH
+      record_internal_free(sizeof(struct nl_sock));
+#endif
     nl_socket_free(si_sock);
+  }
   return err;
 }
 
@@ -371,6 +378,9 @@ int pyr_init_si_comm(char *policy, bool is_child) {
       if (!reg_str) {
 	goto out;
       }
+#ifdef MEMDOM_BENCH
+      record_internal_malloc(strlen(policy)+INT32_STR_SIZE+2);
+#endif
       
       sprintf(reg_str, "%d:%s", si_port, policy);
       err = pyr_to_kernel(SI_COMM_C_REGISTER_PROC, SI_COMM_A_USR_MSG, reg_str);
@@ -380,8 +390,12 @@ int pyr_init_si_comm(char *policy, bool is_child) {
     }
     
  out:
-    if (reg_str)
+    if (reg_str) {
+#ifdef MEMDOM_BENCH
+        record_internal_free(strlen(reg_str)+INT32_STR_SIZE+2);
+#endif
         pyr_free_critical_state(reg_str);
+    }
     if (!err)
         rlog("[%s] Registered process at port %d; SI_COMM family id = %d\n",
            __func__, si_port, nl_fam);
@@ -394,6 +408,9 @@ void pyr_teardown_si_comm() {
       rlog("[%s] Closing the SI socket %d\n", __func__, si_port);
       teardown_epoll();
       nl_close(si_sock);
+#ifdef MEMDOM_BENCH
+      record_internal_free(sizeof(struct nl_sock));
+#endif
       nl_socket_free(si_sock);
     }
 }

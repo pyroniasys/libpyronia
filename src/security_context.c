@@ -29,13 +29,23 @@ int pyr_security_context_alloc(struct pyr_security_context **ctxp,
       if (!c)
 	goto fail;
 
+#ifdef MEMDOM_BENCH
+      record_internal_malloc(sizeof(pyr_security_context));
+#endif
+      
       pyr_interp_dom_alloc_t *interp_dom_meta = malloc(sizeof(pyr_interp_dom_alloc_t));
       if (!interp_dom_meta)
 	goto fail;
+#ifdef MEMDOM_BENCH
+      record_memdom_metadata_alloc(sizeof(pyr_interp_dom_alloc_t));
+#endif
       if ((interp_memdom = memdom_create()) == -1) {
 	printf("[%s] Could not create interpreter dom # %d\n", __func__, 1);
 	goto fail;
       }
+#ifdef MEMDOM_BENCH
+      record_new_domain_page();
+#endif
 
       rlog("[%s] New interpreter memdom: %d\n", __func__, interp_memdom);
       
@@ -86,8 +96,12 @@ int pyr_security_context_alloc(struct pyr_security_context **ctxp,
     }
     return 0;
  fail:
-    if (c)
+    if (c) {
+#ifdef MEMDOM_BENCH
+        record_internal_free(sizeof(struct pyr_security_context));
+#endif
       free(c);
+    }
     *ctxp = NULL;
     return err;
 }
@@ -120,6 +134,9 @@ void free_interp_dom_metadata(pyr_interp_dom_alloc_t **dom) {
         memdom_priv_add(d->memdom_id, MAIN_THREAD, MEMDOM_WRITE);
 	memdom_kill(d->memdom_id);
     }
+#ifdef MEMDOM_BENCH
+      record_memdom_metadata_free(sizeof(pyr_interp_dom_alloc_t));
+#endif
     free(d);
     *dom = NULL;
 }
@@ -136,6 +153,9 @@ void pyr_security_context_free(struct pyr_security_context **ctxp) {
     //pyr_native_lib_context_free(&c->native_libs);
     free_avl_tree(&c->interp_doms);
     c->verified_resources = NULL;
+#ifdef MEMDOM_BENCH
+    record_internal_free(sizeof(struct pyr_security_context));
+#endif
     free(c);
     rlog("[%s] Called from PID %d: %p\n", __func__, getpid(), c);
     *ctxp = NULL;

@@ -23,7 +23,10 @@ void free_avl_tree(avl_node_t** root) {
     if (rootp->right != NULL)
         free_avl_tree(&rootp->right);
     free_interp_dom_metadata(&rootp->memdom_metadata);
-    
+
+#ifdef MEMDOM_BENCH
+    record_memdom_metadata_free(sizeof(avl_node_t));
+#endif
     free(rootp);
     *root = NULL;
 }
@@ -157,6 +160,9 @@ avl_node_t *insert_memdom_metadata(pyr_interp_dom_alloc_t *metadata, avl_node_t 
             fprintf (stderr, "Out of memory!!! (insert)\n");
             return NULL;
         }
+#ifdef MEMDOM_BENCH
+        record_memdom_metadata_alloc(sizeof(avl_node_t));
+#endif
         n->memdom_metadata = metadata;
         n->level = 1;
         n->left = n->right = NULL;

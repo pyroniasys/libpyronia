@@ -34,7 +34,11 @@
 #define malloc(sz) memdom_alloc(memdom_private_id(), sz)
 #endif
 
-//#define PYR_MEMDOM_BENCH 1
+//#define MEMDOM_BENCH 1
+
+#ifdef MEMDOM_BENCH
+#include "mem_benchmarking_util.h"
+#endif
 
 /* Every allocated chunk of memory has this block header to record the required
  * metadata for the allocator to free memory

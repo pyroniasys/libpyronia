@@ -10,8 +10,6 @@
 
 //#define PYRONIA_BENCH // uncomment for benchmarking
 
-#define WITH_STACK_LOGGING // uncomment for stack logging
-
 #define PYR_INTERCEPT_PTHREAD_CREATE
 #ifdef PYR_INTERCEPT_PTHREAD_CREATE
 #define pthread_create(tid, attr, fn, args) pyr_thread_create(tid, attr, fn, args)

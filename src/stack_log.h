@@ -9,6 +9,10 @@
 
 #include <stdbool.h>
 
+//#define PYR_SYSCALL_BENCH
+
+#define WITH_STACK_LOGGING // uncomment for stack logging
+
 #define SHA256_DIGEST_SIZE 32
 
 struct pyr_userspace_stack_hash {

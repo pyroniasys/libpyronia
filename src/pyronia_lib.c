@@ -92,6 +92,11 @@ int pyr_init(const char *main_mod_path,
     char *policy = NULL;
     pthread_mutexattr_t attr;
 
+#ifdef PYRONIA_BENCH
+    struct timespec start, stop;
+    get_cpu_time(&start);
+#endif
+
 #ifdef WITH_STACK_LOGGING
     in_init = 1;
 #endif
@@ -149,6 +154,9 @@ int pyr_init(const char *main_mod_path,
         printf("[%s] Runtime initialization failure\n", __func__);
         goto out;
     }
+#ifdef MEMDOM_BENCH
+    record_internal_malloc(strlen(runtime->main_path)+1);
+#endif
     runtime->nested_grants = 1; // this ensures the child starts from scatch
 
     if (!is_child) {
@@ -196,8 +204,12 @@ int pyr_init(const char *main_mod_path,
     
     pyr_is_inspecting(); // we want to wait for the listener to be ready
  out:
-    if (policy)
+    if (policy) {
+#ifdef MEMDOM_BENCH
+        record_internal_free(strlen(policy)+1);
+#endif
       pyr_free_critical_state(policy);
+    }
     /* Revoke access to the interpreter domain now */
     pyr_revoke_critical_state_write(NULL);
     if (!err) {
@@ -208,6 +220,10 @@ int pyr_init(const char *main_mod_path,
     }
 #ifdef WITH_STACK_LOGGING
     in_init = 0;
+#endif
+#ifdef PYRONIA_BENCH
+    get_cpu_time(&stop);
+    record_init(start, stop);
 #endif
     return err;
 }
@@ -227,12 +243,18 @@ static pyr_interp_dom_alloc_t *new_interp_memdom() {
   new_dom = malloc(sizeof(pyr_interp_dom_alloc_t));
   if (!new_dom)
       goto fail;
+#ifdef MEMDOM_BENCH
+  record_memdom_metadata_alloc(sizeof(pyr_interp_dom_alloc_t));
+#endif
 
   interp_memdom = memdom_create();
   if(interp_memdom == 0 || interp_memdom == -1) {
     printf("[%s] Bad new memdom id %d with %d pool size\n", __func__, interp_memdom, interp_memdom_pool_size);
     goto fail;
   }
+#ifdef MEMDOM_BENCH
+  record_new_domain_page();
+#endif
   // don't forget to add the main thread to this memdom
   smv_join_domain(interp_memdom, MAIN_THREAD);
   memdom_priv_add(interp_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
@@ -709,10 +731,12 @@ void pyr_exit() {
 #ifdef PYR_MEMDOM_BENCH
     printf("%d\n", interp_memdom_pool_size);
 #endif
-    if (runtime) {
-      pyr_grant_critical_state_write((void *)runtime->main_path);
-      if (runtime->main_path)
-	pyr_free_critical_state(runtime->main_path);
+    pyr_grant_critical_state_write((void *)runtime->main_path);
+    if (runtime->main_path) {
+#ifdef MEMDOM_BENCH
+        record_internal_free(strlen(runtime->main_path)+1);
+#endif
+        pyr_free_critical_state(runtime->main_path);
     }
 #ifdef WITH_STACK_LOGGING
     if (runtime->verified_resources)
@@ -796,9 +820,13 @@ int compute_callstack_hash(unsigned char **callstack_hash) {
     unsigned char *hash = NULL;
     char cs_str[512];
 
+#ifdef PYRONIA_BENCH
+    struct timespec start, stop;
+#endif
+
     if (!runtime || in_init)
       goto out;
-    
+
     // the condition will be set to false at the top of the
     // recv loop (i.e. after this function returns)
     pthread_mutex_lock(&security_ctx_mutex);
@@ -816,6 +844,9 @@ int compute_callstack_hash(unsigned char **callstack_hash) {
         err = -1;
         goto out;
     }
+#ifdef PYRONIA_BENCH
+    get_cpu_time(&start);
+#endif
     // copy the string over before we revoke access to the SI dom
     memset(cs_str, 0, strlen(tmp)+1);
     strcpy(cs_str, tmp);
@@ -829,9 +860,16 @@ int compute_callstack_hash(unsigned char **callstack_hash) {
     hash = malloc(SHA256_DIGEST_LENGTH);
     if (!hash)
       goto out;
+#ifdef MEMDOM_BENCH
+    record_internal_malloc(SHA256_DIGEST_LENGTH);
+#endif
 
     hash = SHA256((const unsigned char *)cs_str, strlen(cs_str), hash);
     err = 0;
+#ifdef PYRONIA_BENCH
+    get_cpu_time(&stop);
+    record_callstack_hash(start, stop);
+#endif
  out:
     *callstack_hash = hash;
     memset(cs_str, 0, 512);

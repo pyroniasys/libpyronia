@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <memdom_lib.h>
 #include "policy_avl_tree.h"
 
 /* Free all nodes in the given AVL tree
@@ -21,9 +22,15 @@ void free_pol_avl_tree(pol_avl_node_t** root) {
         free_pol_avl_tree(&rootp->left);
     if (rootp->right != NULL)
         free_pol_avl_tree(&rootp->right);
-    if (rootp->verified_resource)
+    if (rootp->verified_resource) {
+#ifdef MEMDOM_BENCH
+        record_internal_free(strlen(rootp->verified_resource)+1);
+#endif
         free(rootp->verified_resource);
-
+    }
+#ifdef MEMDOM_BENCH
+    record_internal_free(sizeof(pol_avl_node_t));
+#endif
     free(rootp);
     *root = NULL;
 }
@@ -128,9 +135,15 @@ pol_avl_node_t *insert_resource(const char *resource, pol_avl_node_t *n) {
             fprintf (stderr, "Out of memory!!! (insert)\n");
             return NULL;
         }
+#ifdef MEMDOM_BENCH
+        record_internal_malloc(sizeof(pol_avl_node_t));
+#endif
         n->verified_resource = malloc(strlen(resource)+1);
         if (!n->verified_resource)
             return NULL;
+#ifdef MEMDOM_BENCH
+        record_internal_malloc(strlen(resource)+1);
+#endif
         memset(n->verified_resource, 0, strlen(resource)+1);
         memcpy(n->verified_resource, resource, strlen(resource));
         n->level = 1;
