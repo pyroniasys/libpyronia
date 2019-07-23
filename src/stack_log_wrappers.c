@@ -15,6 +15,8 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <errno.h>
+
+#include <smv_lib.h>
 #include "stack_log.h"
 
 typedef int(*real_open_t)(const char *, int, mode_t);
@@ -31,7 +33,6 @@ static void print_hash(unsigned char *hash_buf) {
   printf("\n");
 }
 
-/*
 int real_open(const char *pathname, int flags, mode_t mode) {
   return ((real_open_t)dlsym(RTLD_NEXT, "open"))(pathname, flags, mode);
 }
@@ -41,20 +42,28 @@ int open(const char *pathname, int flags, mode_t mode) {
     int err = -1;
     unsigned char *hash = NULL;
     bool is_logged = false;
+    struct pyr_userspace_stack_hash uh;
 
     // check to see if the requested pathname has already been verified
     is_logged = check_verified_resource(pathname);
-    if (!is_logged) {
-        err = compute_callstack_hash(pathname, &hash);
+    if (is_logged) {
+        err = compute_callstack_hash(&hash);
     }
 
+    uh.resource.filename = pathname;
+    uh.includes_stack = 0;
     if (!err && hash) {
       //print_hash(hash);
-        fd = real_open(pathname, flags, mode);
+      	uh.includes_stack = 1;
+	memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
     }
-    else {
-        // normal open
-        fd = real_open(pathname, flags, mode);
+
+    rlog("[%s] Passing call stack %p for %s? %s\n", __func__, &uh, uh.resource.filename, (uh.includes_stack ? "yes" : "no"));
+    
+    fd = real_open((const char *)&uh, flags, mode);
+    if (fd != -1) {
+      err = record_verified_resource(pathname);
+      rlog("[%s] Syscall successful for path %s\n", __func__, pathname);
     }
 
     // the SI thread will take care of logging if the kernel
@@ -62,7 +71,47 @@ int open(const char *pathname, int flags, mode_t mode) {
     if (hash)
       free(hash);
   return fd;
-  }*/
+}
+
+int real_open64(const char *pathname, int flags, mode_t mode) {
+  return ((real_open_t)dlsym(RTLD_NEXT, "open64"))(pathname, flags, mode);
+}
+
+int open64(const char *pathname, int flags, mode_t mode) {
+    int fd = -1;
+    int err = -1;
+    unsigned char *hash = NULL;
+    bool is_logged = false;
+    struct pyr_userspace_stack_hash uh;
+
+    // check to see if the requested pathname has already been verified
+    is_logged = check_verified_resource(pathname);
+    if (is_logged) {
+        err = compute_callstack_hash(&hash);
+    }
+
+    uh.resource.filename = pathname;
+    uh.includes_stack = 0;
+    if (!err && hash) {
+      //print_hash(hash);
+      	uh.includes_stack = 1;
+	memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
+    }
+
+    rlog("[%s] Passing call stack %p for %s? %s\n", __func__, &uh, uh.resource.filename, (uh.includes_stack ? "yes" : "no"));
+    
+    fd = real_open64((const char *)&uh, flags, mode);
+    if (fd != -1) {
+      err = record_verified_resource(pathname);
+      rlog("[%s] Syscall successful for path %s\n", __func__, pathname);
+    }
+
+    // the SI thread will take care of logging if the kernel
+    // verifies the stack for this pathname
+    if (hash)
+      free(hash);
+  return fd;
+}
 
 FILE *real_fopen(const char *pathname, const char *mode) {
   return ((real_fopen_t)dlsym(RTLD_NEXT, "fopen"))(pathname, mode);
@@ -76,6 +125,8 @@ FILE *fopen(const char *pathname, const char *mode) {
     bool is_logged = false;
     struct pyr_userspace_stack_hash uh;
 
+    rlog("[%s] pathname: %s\n", __func__, pathname);
+    
     // check to see if the requested pathname has already been verified
     is_logged = check_verified_resource(pathname);
     if (is_logged) {
@@ -92,6 +143,49 @@ FILE *fopen(const char *pathname, const char *mode) {
 
     rlog("[%s] Passing call stack %p for %s? %s\n", __func__, &uh, uh.resource.filename, (uh.includes_stack ? "yes" : "no"));
     f = real_fopen((const char *)&uh, mode);
+
+    // syscall succeeded, so record the resource as verified
+    if (f != NULL) {
+      err = record_verified_resource(pathname);
+    }
+    
+    // the SI thread will take care of logging if the kernel
+    // verifies the stack for this pathname
+    if (hash)
+      free(hash);
+  return f;
+}
+
+FILE *real_fopen64(const char *pathname, const char *mode) {
+  return ((real_fopen_t)dlsym(RTLD_NEXT, "fopen64"))(pathname, mode);
+}
+
+// wrapper around basic open
+FILE *fopen64(const char *pathname, const char *mode) {
+    FILE *f = NULL;
+    int err = -1;
+    unsigned char *hash = NULL;
+    bool is_logged = false;
+    struct pyr_userspace_stack_hash uh;
+
+    rlog("[%s] pathname: %s\n", __func__, pathname);
+    
+    // check to see if the requested pathname has already been verified
+    is_logged = check_verified_resource(pathname);
+    if (is_logged) {
+        err = compute_callstack_hash(&hash);
+    }
+
+    uh.resource.filename = pathname;
+    uh.includes_stack = 0;
+    if (!err && hash) {
+	uh.includes_stack = 1;
+	memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
+	//print_hash(uh.hash);
+    }
+
+    rlog("[%s] Passing call stack %p for %s? %s\n", __func__, &uh, uh.resource.filename, (uh.includes_stack ? "yes" : "no"));
+    f = real_fopen64((const char *)&uh, mode);
 
     // syscall succeeded, so record the resource as verified
     if (f != NULL) {
@@ -200,8 +294,6 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
       rlog("[%s] syscall succeeded\n", __func__);
     }
     
-    // the SI thread will take care of logging if the kernel
-    // verifies the stack for this pathname
  out:
     memset(addr_str, 0, INET6_ADDRSTRLEN+1);
     if (hash)
@@ -218,34 +310,55 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     int err = -1;
     unsigned char *hash = NULL;
     bool is_logged = false;
-    const char *addr_str = NULL;
+    char addr_str[INET6_ADDRSTRLEN+1];
+    struct pyr_userspace_stack_hash uh;
 
-    in_addr_to_str(addr, &addr_str);
-    if (addr_str == NULL) {
+    memset(addr_str, 0, INET6_ADDRSTRLEN+1);
+    in_addr_to_str(addr, addr_str);
+    if (addr_str[0] == '\0') {
       errno = EADDRNOTAVAIL; // is this the best errno for this case?
       goto out;
     }
     
     // check to see if the requested IP address has already been verified
     is_logged = check_verified_resource(addr_str);
-    if (!is_logged) {
-        err = compute_callstack_hash(addr_str, &hash);
+    if (is_logged) {
+        err = compute_callstack_hash(&hash);
     }
 
-    if (!err && hash) {
-      //print_hash(hash);
-        err = real_bind(sockfd, addr, addrlen);
+    printf("[%s] Got sockaddr for %s\n", __func__, addr_str);
+
+    if (!strcmp(addr_str, "netlink")) {
+      // SMV and Pyronia use netlink socket binds before we've actually
+      // initialized the subsystem
+      err = real_bind(sockfd, addr, addrlen);
     }
     else {
-        // normal bind
-        err = real_bind(sockfd, addr, addrlen);
+      uh.resource.addr = addr;
+      uh.includes_stack = 0;
+      if (!err && hash) {
+	//print_hash(hash);
+	uh.includes_stack = 1;
+	memcpy(uh.hash, hash, SHA256_DIGEST_SIZE);
+      }
+      
+      printf("[%s] Passing call stack for %s? %s\n", __func__, addr_str, (uh.includes_stack ? "yes" : "no"));
+      
+      err = real_bind(sockfd, (const struct sockaddr *)&uh, addrlen);
+      
+      // syscall succeeded, so record the resource as verified
+      if (err == 0) {
+	err = record_verified_resource(addr_str);
+	rlog("[%s] syscall succeeded\n", __func__);
+      }
+      else {
+	perror("[bind]");
+      }
     }
-
-    // the SI thread will take care of logging if the kernel
-    // verifies the stack for this pathname
  out:
-    if (err)
-      printf("[%s] Error %s\n", __func__, strerror(errno));
+    memset(addr_str, 0, INET6_ADDRSTRLEN+1);
+    if (hash)
+      free(hash);
     return err;
 }
 */

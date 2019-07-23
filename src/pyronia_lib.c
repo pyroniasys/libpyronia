@@ -31,7 +31,7 @@
 #include "policy_avl_tree.h"
 #include "stack_log.h"
 // don't collect stack for logging if true since the interp is not fully initialized yet
-static int in_init = 1; 
+static int in_init = 1;
 #endif
 
 static struct pyr_security_context *runtime = NULL;
@@ -696,7 +696,7 @@ int pyr_is_interpreter_build() {
 
 /* Do all necessary teardown actions. */
 void pyr_exit() {
-    if (is_build) {
+    if (is_build || !runtime) {
       return;
     }
 
@@ -715,7 +715,8 @@ void pyr_exit() {
 	pyr_free_critical_state(runtime->main_path);
     }
 #ifdef WITH_STACK_LOGGING
-    free_pol_avl_tree(&runtime->verified_resources);
+    if (runtime->verified_resources)
+      free_pol_avl_tree(&runtime->verified_resources);
 #endif
     pyr_security_context_free(&runtime);
 }
@@ -750,7 +751,10 @@ int pyr_collect_runtime_callstack() {
  * is being logged.
  */
 int record_verified_resource(const char *resource) {
-    int err = 0;
+    int err = -1;
+    if (!runtime)
+      goto out;
+
     pthread_mutex_lock(&security_ctx_mutex);
     runtime->verified_resources = insert_resource(resource, runtime->verified_resources);
 
@@ -758,7 +762,9 @@ int record_verified_resource(const char *resource) {
         printf("[%s] Error inserting newly verified resource %s\n", __func__, resource);
         err = -1;
     }
+    err = 0;
     pthread_mutex_unlock(&security_ctx_mutex);
+ out:
     return err;
 }
 
