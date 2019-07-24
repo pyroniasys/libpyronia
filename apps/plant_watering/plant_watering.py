@@ -83,38 +83,37 @@ sock = mqttc.socket()
 if not sock:
    raise Exception("Socket is gone")
 
-for x in range(0, 2):
-   # Generate random True or False test data to represent
-   # okay or low moisture levels, respectively.
-   moisture = random.choice([True, False])
+# Generate random True or False test data to represent
+# okay or low moisture levels, respectively.
+moisture = random.choice([True, False])
 
-   #mqttc.loop_start()
+#mqttc.loop_start()
+
+print("Selecting for reading" + (" and writing" if mqttc.want_write() else ""))
+r, w, e = select(
+   [sock],
+   [sock] if mqttc.want_write() else [],
+   [],
+   1
+)
+
+if sock in r:
+   print("Socket is readable, calling loop_read")
+   mqttc.loop_read()
    
-   print("Selecting for reading" + (" and writing" if mqttc.want_write() else ""))
-   r, w, e = select(
-      [sock],
-      [sock] if mqttc.want_write() else [],
-      [],
-      1
-   )
-   
-   if sock in r:
-      print("Socket is readable, calling loop_read")
-      mqttc.loop_read()
-      
    if sock in w:
       print("Socket is writable, calling loop_write")
       mqttc.loop_write()
       
    while connflag == False:
       print('.')
-
-   if moisture:
-      message = '{"state":{"reported":{"moisture":"okay"}}}'
-   else:
-      message = '{"state":{"reported":{"moisture":"low"}}}'
-      mqttc.publish('$aws/things/'+SHADOW_HANDLER+'/shadow/update', message, qos=1)
-   # Wait for this test value to be added.
-   time.sleep(2)
+      
+if moisture:
+   message = '{"state":{"reported":{"moisture":"okay"}}}'
+else:
+   message = '{"state":{"reported":{"moisture":"low"}}}'
+   mqttc.publish('$aws/things/'+SHADOW_HANDLER+'/shadow/update', message, qos=1)
+# Wait for this test value to be added.
+#time.sleep(2)
 
 mqttc.disconnect()

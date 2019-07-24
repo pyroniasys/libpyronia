@@ -13,7 +13,7 @@ tweet = ['A tweet from my pi with pyronia', 'Hello!  ']
 base_image_name = '/home/pyronia/libpyronia/testsuite/python-tests/edge.jpg'
 
 #while True:
-for x in range(0, 2):
+for x in range(0, 1):
 
     #base_image = imread(base_image_name)
 
@@ -41,5 +41,5 @@ for x in range(0, 2):
     api.update_with_media(photo_path, status=status)
 
     #How many seconds before the script runs again
-    time.sleep(2)
+    #time.sleep(2)
 

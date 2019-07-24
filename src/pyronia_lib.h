@@ -7,8 +7,11 @@
 #define __PYR_LIB_H
 
 #include <stdlib.h>
+#include <memdom_lib.h>
+#include "stack_log.h"
+#include "benchmarking_util.h"
 
-//#define PYRONIA_BENCH // uncomment for benchmarking
+#define PYRONIA_BENCH // uncomment for benchmarking
 
 #define PYR_INTERCEPT_PTHREAD_CREATE
 #ifdef PYR_INTERCEPT_PTHREAD_CREATE

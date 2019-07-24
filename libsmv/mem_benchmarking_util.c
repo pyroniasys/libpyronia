@@ -53,21 +53,16 @@ void record_new_domain_page() {
     pyr_memdom_data->num_pages++;
 }
 
-void output_memdom_bench(const char *filename) {
-    FILE *f = NULL;
+void output_memdom_bench(FILE *f) {
     if (pyr_memdom_data == NULL) {
         return;
     }
-
-    f = fopen(filename, "w");
-    if (!f)
-        return;
 
     fprintf(f, "%lu, %lu, %d\n",
             pyr_memdom_data->peak_alloc,
             pyr_memdom_data->peak_metadata_alloc,
             pyr_memdom_data->num_pages
            );
-    fclose(f);
+    
     free(pyr_memdom_data);
 }

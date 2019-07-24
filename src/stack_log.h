@@ -7,8 +7,6 @@
 #ifndef PYR_STACK_LOG_H
 #define PYR_STACK_LOG_H
 
-#include <stdbool.h>
-
 //#define PYR_SYSCALL_BENCH
 
 #define WITH_STACK_LOGGING // uncomment for stack logging
@@ -25,7 +23,7 @@ struct pyr_userspace_stack_hash {
 };
 
 int record_verified_resource(const char *resource);
-bool check_verified_resource(const char *resource);
+int check_verified_resource(const char *resource);
 int compute_callstack_hash(unsigned char **callstack_hash);
 
 #endif /* PYR_STACK_LOG_H */

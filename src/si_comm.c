@@ -321,9 +321,6 @@ static int open_si_socket() {
     rlog("[%s] Could not allocate SI netlink socket\n", __func__);
     return -1;
   }
-#ifdef MEMDOM_BENCH
-  record_internal_malloc(sizeof(struct nl_sock));
-#endif
   nl_socket_disable_seq_check(si_sock);
   nl_socket_disable_auto_ack(si_sock);
   
@@ -341,9 +338,6 @@ static int open_si_socket() {
  fail:
   printf("{%s] Following libnl error occurred: %s\n", __func__, nl_geterror(err));
   if (si_sock) {
-#ifdef MEMDOM_BENCH
-      record_internal_free(sizeof(struct nl_sock));
-#endif
     nl_socket_free(si_sock);
   }
   return err;
@@ -408,9 +402,6 @@ void pyr_teardown_si_comm() {
       rlog("[%s] Closing the SI socket %d\n", __func__, si_port);
       teardown_epoll();
       nl_close(si_sock);
-#ifdef MEMDOM_BENCH
-      record_internal_free(sizeof(struct nl_sock));
-#endif
       nl_socket_free(si_sock);
     }
 }

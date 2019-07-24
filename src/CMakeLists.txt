@@ -22,4 +22,4 @@ add_library(pyronia_opt SHARED stack_log_wrappers.c)
 add_library(pyronia SHARED memdom_avl_tree.c policy_avl_tree.c security_context.c serialization.c si_comm.c pyronia_lib.c benchmarking_util.c)
 
 target_link_libraries(pyronia ${LIBNL3_LIBRARIES} smv pthread crypto ssl)
-target_link_libraries(pyronia_opt pyronia)
+target_link_libraries(pyronia_opt pyronia dl)

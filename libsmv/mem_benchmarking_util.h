@@ -18,7 +18,7 @@ extern "C" {
     void record_memdom_metadata_alloc(size_t sz);
     void record_memdom_metadata_free(size_t sz);
     void record_new_domain_page(void);
-    void output_memdom_bench(const char *);
+    void output_memdom_bench(FILE *);
 #ifdef __cplusplus
 }
 #endif

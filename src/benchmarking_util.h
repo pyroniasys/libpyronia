@@ -32,14 +32,6 @@ extern "C" {
     void record_connect(struct timespec start, struct timespec stop);
     void record_bind(struct timespec start, struct timespec stop);
     void output_user_syscall_bench(FILE *f);
-
-    void init_memdom_benchmarking(void);
-    void record_internal_malloc(size_t sz);
-    void record_internal_free(size_t sz);
-    void record_memdom_metadata_alloc(size_t sz);
-    void record_memdom_metadata_free(size_t sz);
-    void record_new_domain_page(void);
-    void output_memdom_bench(const char *);
 #ifdef __cplusplus
 }
 #endif

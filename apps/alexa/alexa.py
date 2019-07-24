@@ -19,6 +19,9 @@ lights = [24, 25] # GPIO Pins with LED's conneted
 device = "plughw:1" # Name of your microphone/soundcard in arecord -L
 '''
 
+#num_iters = 100
+#iter_times = []
+
 #Setup
 recorded = False
 servers = ["unix:/tmp/memcached.sock"]
@@ -154,6 +157,4 @@ if __name__ == "__main__":
         GPIO.output(lights[0], GPIO.LOW)
     start()
     '''
-    for x in range (0, 2):
-        alexa()
-        time.sleep(2)
+    alexa()

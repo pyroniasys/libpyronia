@@ -23,13 +23,12 @@
 #include "si_comm.h"
 #include "util.h"
 
-#ifdef PYRONIA_BENCH
+#if defined(PYRONIA_BENCH) || defined(PYR_SYSCALL_BENCH)
 #include "benchmarking_util.h"
 #endif
 
 #ifdef WITH_STACK_LOGGING
 #include "policy_avl_tree.h"
-#include "stack_log.h"
 // don't collect stack for logging if true since the interp is not fully initialized yet
 static int in_init = 1;
 #endif
@@ -795,7 +794,7 @@ int record_verified_resource(const char *resource) {
 /** Checks if the given resource is already in the runtime's list
  * of verified resources, and collects the call stack, if it is found
  */
-bool check_verified_resource(const char *resource) {
+int check_verified_resource(const char *resource) {
     bool contains = false;
     pthread_mutex_lock(&security_ctx_mutex);
     if (!runtime || in_init)

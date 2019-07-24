@@ -14,6 +14,7 @@ echo "================= Copying smv header files to: $SYSINC ================="
 sudo cp smv_lib.h /usr/include
 sudo cp memdom_lib.h /usr/include
 sudo cp kernel_comm.h /usr/include
+sudo cp mem_benchmarking_util.h /usr/include
 
 echo "================= Copying smv library to system folder: $SYSLIB ================="
 sudo cp libsmv.so /usr/lib

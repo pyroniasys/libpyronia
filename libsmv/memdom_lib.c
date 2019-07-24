@@ -437,7 +437,7 @@ void free_list_init(int memdom_id){
   
   new_free_list = alloc_metadata_init(memdom[memdom_id]->start, memdom[memdom_id]->total_size);
 #ifdef MEMDOM_BENCH
-    record_memdom_metadata_alloc(sizeof((struct alloc_metadata));
+    record_memdom_metadata_alloc(sizeof(struct alloc_metadata));
 #endif
   memdom[memdom_id]->free_list_head = NULL;   // reclaimed chunk are inserted to head
   memdom[memdom_id]->free_list_tail = new_free_list;
@@ -518,7 +518,7 @@ void *memdom_alloc(int memdom_id, unsigned long sz){
     if( free_list->size == 0 ) {
       free(free_list);
 #ifdef MEMDOM_BENCH
-      record_memdom_metadata_free(sizeof((struct alloc_metadata));
+      record_memdom_metadata_free(sizeof(struct alloc_metadata));
 #endif
       
       memdom[memdom_id]->free_list_tail = NULL;
@@ -526,7 +526,7 @@ void *memdom_alloc(int memdom_id, unsigned long sz){
     }
     new_alloc = alloc_metadata_init(memblock, sz);
 #ifdef MEMDOM_BENCH
-    record_memdom_metadata_alloc(sizeof((struct alloc_metadata));
+    record_memdom_metadata_alloc(sizeof(struct alloc_metadata));
 #endif
     allocs_insert_to_head(memdom_id, new_alloc);
     goto out;
@@ -573,7 +573,7 @@ void *memdom_alloc(int memdom_id, unsigned long sz){
 	rlog("[%s] Adjust free list to addr %p, sz %lu\n",
 	     __func__, free_list->addr, free_list->size);
 #ifdef MEMDOM_BENCH
-        record_memdom_metadata_alloc(sizeof((struct alloc_metadata));
+        record_memdom_metadata_alloc(sizeof(struct alloc_metadata));
 #endif
       }
       allocs_insert_to_head(memdom_id, new_alloc);

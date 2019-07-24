@@ -3,7 +3,6 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <stdbool.h>
 #include <pthread.h>
 #include "smv_lib.h"
 #include "kernel_comm.h"
@@ -34,7 +33,7 @@
 #define malloc(sz) memdom_alloc(memdom_private_id(), sz)
 #endif
 
-//#define MEMDOM_BENCH 1
+//#define MEMDOM_BENCH
 
 #ifdef MEMDOM_BENCH
 #include "mem_benchmarking_util.h"

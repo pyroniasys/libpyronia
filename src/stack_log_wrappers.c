@@ -14,6 +14,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <stdbool.h>
 #include <errno.h>
 
 #include <smv_lib.h>
@@ -132,7 +133,7 @@ int open64(const char *pathname, int flags, mode_t mode) {
     if (hash)
       free(hash);
 #else
-    f = real_open64(pathname, flags, mode);
+    fd = real_open64(pathname, flags, mode);
 #endif
 #ifdef PYR_SYSCALL_BENCH
     get_cpu_time(&stop);

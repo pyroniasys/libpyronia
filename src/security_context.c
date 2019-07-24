@@ -30,7 +30,7 @@ int pyr_security_context_alloc(struct pyr_security_context **ctxp,
 	goto fail;
 
 #ifdef MEMDOM_BENCH
-      record_internal_malloc(sizeof(pyr_security_context));
+      record_internal_malloc(sizeof(struct pyr_security_context));
 #endif
       
       pyr_interp_dom_alloc_t *interp_dom_meta = malloc(sizeof(pyr_interp_dom_alloc_t));

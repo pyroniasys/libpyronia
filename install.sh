@@ -16,6 +16,8 @@ make
 # Copy library and header files to local machine
 echo "================= Copying pyronia header files to: $SYSINC ================="
 sudo cp pyronia_lib.h /usr/include
+sudo cp stack_log.h /usr/include
+sudo cp benchmarking_util.h /usr/include
 
 echo "================= Copying pyronia library to system folder: $SYSLIB ================="
 sudo cp libpyronia.so /usr/lib
