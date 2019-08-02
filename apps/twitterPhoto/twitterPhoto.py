@@ -2,44 +2,41 @@ import tweepy
 import time
 import random
 from subprocess import call
-#from datetime import datetime
-from cv2 import imread
-#import image_lib
-#import msgformat
 from api_keys import *
+#import attacklib
 
 #These are the phrases variables that will be sent with the tweet
-tweet = ['A tweet from my pi with pyronia', 'Hello!  ']
-base_image_name = '/home/pyronia/libpyronia/testsuite/python-tests/edge.jpg'
+tweet = 'Tomato status:'
+image_name = '/home/pyronia/libpyronia/apps/twitterPhoto/tomato-status.jpg'
 
 #while True:
-for x in range(0, 1):
+num_iters = 100
+iter_times = []
 
-    #base_image = imread(base_image_name)
+#for i in range(0, num_iters):
+#start = time.clock()
+#base_image = imread(base_image_name)
+    
+# OAuth process, using the keys and tokens
+auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+auth.set_access_token(access_token, access_token_secret)
 
-    #time and date for filename
-    '''
-    i = datetime.now()               
-    photo_name = msgformat.nice_name()
-    print(photo_name)
-    '''
-    
-    #proc = image_lib.edgify(base_image, base_image_name)
-    
-    # OAuth process, using the keys and tokens
-    auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-    auth.set_access_token(access_token, access_token_secret)
-    
-    # Creation of the actual interface, using authentication
-    api = tweepy.API(auth)
-    
-    # Send photo to destination
-    photo_path = base_image_name
-    # Tweet text
-    status = (random.choice(tweet)) #+  i.strftime('%Y/%m/%d %H:%M:%S')
-    # Send the tweet with photo
-    api.update_with_media(photo_path, status=status)
+# Creation of the actual interface, using authentication
+api = tweepy.API(auth)
 
-    #How many seconds before the script runs again
-    #time.sleep(2)
+# Send the tweet with photo
+api.update_with_media(image_name, status=tweet)
+#attacklib.unauth_server_conn(api, image_name, tweet)
 
+#end = time.clock()
+#iter_times.append(str(end-start))
+
+#How many seconds before the script runs again
+#time.sleep(5)
+
+'''
+f = open('/home/pyronia/libpyronia/apps/twitterPhoto/twitterPhoto.py.data', 'a+')
+f.write(' '.join(iter_times))
+f.write('\n')
+f.close()
+'''

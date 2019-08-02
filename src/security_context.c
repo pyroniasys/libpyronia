@@ -69,6 +69,7 @@ int pyr_security_context_alloc(struct pyr_security_context **ctxp,
       interp_dom_meta->end = interp_dom_meta->start + MEMDOM_HEAP_SIZE;
       interp_dom_meta->has_space = true;
       interp_dom_meta->writable = true;
+      interp_dom_meta->nested_grants = 1;
       c->interp_doms = insert_memdom_metadata(interp_dom_meta, NULL);
       if (!c->interp_doms) {
 	printf("[%s] could not insert first metadata\n", __func__);

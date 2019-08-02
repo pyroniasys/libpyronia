@@ -182,6 +182,9 @@ FILE *fopen(const char *pathname, const char *mode) {
     if (f != NULL) {
       err = record_verified_resource(pathname);
     }
+    else {
+      //printf("Failed to open %s: %s\n", pathname, strerror(errno));
+    }
 
     // the SI thread will take care of logging if the kernel
     // verifies the stack for this pathname

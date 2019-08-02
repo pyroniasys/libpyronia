@@ -350,8 +350,6 @@ int pyr_init_si_comm(char *policy, bool is_child) {
     int err = 0;
     char *reg_str = NULL;
 
-    /* Initialize the SI socket */
-    if (!is_child) {
       err = open_si_socket();
       if (err) {
 	printf("[%s] SI socket initialization failure\n", __func__);
@@ -368,20 +366,25 @@ int pyr_init_si_comm(char *policy, bool is_child) {
         goto out;
       }
 
-      reg_str = pyr_alloc_critical_runtime_state(INT32_STR_SIZE+strlen(policy)+2);
-      if (!reg_str) {
-	goto out;
-      }
+      rlog("[%s] Open SI socket at port %d\n", __func__, si_port);
+
+      /* Initialize the SI socket */
+      if (!is_child) {
+	
+	reg_str = pyr_alloc_critical_runtime_state(INT32_STR_SIZE+strlen(policy)+2);
+	if (!reg_str) {
+	  goto out;
+	}
 #ifdef MEMDOM_BENCH
-      record_internal_malloc(strlen(policy)+INT32_STR_SIZE+2);
+	record_internal_malloc(strlen(policy)+INT32_STR_SIZE+2);
 #endif
-      
-      sprintf(reg_str, "%d:%s", si_port, policy);
-      err = pyr_to_kernel(SI_COMM_C_REGISTER_PROC, SI_COMM_A_USR_MSG, reg_str);
-      if (err) {
-	goto out;
+	
+	sprintf(reg_str, "%d:%s", si_port, policy);
+	err = pyr_to_kernel(SI_COMM_C_REGISTER_PROC, SI_COMM_A_USR_MSG, reg_str);
+	if (err) {
+	  goto out;
+	}
       }
-    }
     
  out:
     if (reg_str) {

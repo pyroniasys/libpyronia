@@ -13,7 +13,7 @@
 #include "memdom_avl_tree.h"
 #include "policy_avl_tree.h"
 
-#define MAX_NUM_INTERP_DOMS 250
+#define MAX_NUM_INTERP_DOMS 1024
 
 struct pyr_native_lib_context {
     char *library_name; // runtimes also identify libraries by string name
@@ -30,6 +30,7 @@ struct pyr_interp_dom_alloc {
     void *end;
     bool has_space;
     bool writable;
+    int nested_grants;
 };
 
 typedef struct pyr_interp_dom_alloc pyr_interp_dom_alloc_t;

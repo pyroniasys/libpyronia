@@ -48,8 +48,10 @@ pyr_interp_dom_alloc_t* find_memdom_metadata(void *addr, avl_node_t *n) {
         return find_memdom_metadata(addr, n->left);
     else if (addr > metadata->end)
         return find_memdom_metadata(addr, n->right);
-    else if (addr >= metadata->start && addr <= metadata->end)
+    else if (addr >= metadata->start && addr < metadata->end)
         return metadata;
+    else if (addr == metadata->end)
+        return find_memdom_metadata(addr, n->right);
 
     return NULL;
 }

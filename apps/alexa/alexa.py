@@ -19,9 +19,6 @@ lights = [24, 25] # GPIO Pins with LED's conneted
 device = "plughw:1" # Name of your microphone/soundcard in arecord -L
 '''
 
-#num_iters = 100
-#iter_times = []
-
 #Setup
 recorded = False
 servers = ["unix:/tmp/memcached.sock"]
@@ -145,10 +142,25 @@ if __name__ == "__main__":
     GPIO.setup(lights, GPIO.OUT)
     GPIO.output(lights, GPIO.LOW)
     '''
+    num_iters = 100
+    iter_times = []
+    #f = open('/home/pyronia/libpyronia/apps/alexa/alexa.log', 'a+')
+
+    #    for i in range(0, num_iters):
+    #start = time.clock()
     while internet_on() == False:
         print(".")
-    token = gettoken()
+        token = gettoken()
+    alexa()
+    #end = time.clock()
+    #iter_times.append(str(end-start))
+        
+    #time.sleep(5)
     '''
+    f = open('/home/pyronia/libpyronia/apps/alexa/alexa.py.data', 'a+')
+    f.write(' '.join(iter_times))
+    f.write('\n')
+    f.close()
     os.system('mpg123 -q {}1sec.mp3 {}hello.mp3'.format(path, path))
     for x in range(0, 3):
         time.sleep(.1)
@@ -157,4 +169,4 @@ if __name__ == "__main__":
         GPIO.output(lights[0], GPIO.LOW)
     start()
     '''
-    alexa()
+
