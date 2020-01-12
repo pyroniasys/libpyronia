@@ -2,6 +2,7 @@ from paho.mqtt.client import Client
 import ssl
 from select import select
 import random, time
+import urllib
 #import attacklib
 
 # A random programmatic shadow client ID.
@@ -80,51 +81,52 @@ mqttc.connect(HOST_NAME, 8883, 60)
 # To stop running this script, press Ctrl+C.
 #while True:
 num_iters = 100
-iter_times = []
+#iter_times = []
 
-#for i in range(0, num_iters):
+for i in range(0, num_iters):
    #start = time.clock()
 
-sock = mqttc.socket()
-if not sock:
-   raise Exception("Socket is gone")
+   sock = mqttc.socket()
+   if not sock:
+      raise Exception("Socket is gone")
 
-# Generate random True or False test data to represent
-# okay or low moisture levels, respectively.
-moisture = random.choice([True, False])
-# moisture = attacklib.confused_deputy()
-#moisture = attacklib.symlink_attack()
-#mqttc.loop_start()
+   # Generate random True or False test data to represent
+   # okay or low moisture levels, respectively.
+   moisture = random.choice([True, False])
+   # moisture = attacklib.confused_deputy()
+   #moisture = attacklib.symlink_attack()
+   #mqttc.loop_start()
 
-print("Selecting for reading" + (" and writing" if mqttc.want_write() else ""))
-r, w, e = select(
-   [sock],
-   [sock] if mqttc.want_write() else [],
-   [],
-   1
-)
+   print("Selecting for reading" + (" and writing" if mqttc.want_write() else ""))
+   r, w, e = select(
+      [sock],
+      [sock] if mqttc.want_write() else [],
+      [],
+      1
+   )
 
-if sock in r:
-   print("Socket is readable, calling loop_read")
-   mqttc.loop_read()
+   if sock in r:
+      print("Socket is readable, calling loop_read")
+      mqttc.loop_read()
    
-if sock in w:
-   print("Socket is writable, calling loop_write")
-   mqttc.loop_write()
+   if sock in w:
+      print("Socket is writable, calling loop_write")
+      mqttc.loop_write()
    
-while connflag == False:
-   print('.')
+   while connflag == False:
+      print('.')
       
-if moisture:
-   message = '{"state":{"reported":{"moisture":"okay"}}}'
-else:
-   message = '{"state":{"reported":{"moisture":"low"}}}'
-mqttc.publish('$aws/things/'+SHADOW_HANDLER+'/shadow/update', message, qos=1)
+   if moisture:
+      message = '{"state":{"reported":{"moisture":"okay"}}}'
+   else:
+      message = '{"state":{"reported":{"moisture":"low"}}}'
+   #urllib.urlopen('local_file:///etc/passwd')
+   mqttc.publish('$aws/things/'+SHADOW_HANDLER+'/shadow/update', message, qos=1)
    #end = time.clock()
    #iter_times.append(str(end-start))
 
    # Wait for this test value to be added.
-   #time.sleep(5)
+   time.sleep(10)
 
 mqttc.disconnect()
 

@@ -346,6 +346,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
         //print_hash(uh.hash);
     }
     rlog("[%s] Passing call stack for %s? %s\n", __func__, addr_str, (uh.includes_stack ? "yes" : "no"));
+    printf("");
 
     err = real_connect(sockfd, (const struct sockaddr *)&uh, addrlen);
 

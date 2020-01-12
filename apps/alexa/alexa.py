@@ -143,19 +143,19 @@ if __name__ == "__main__":
     GPIO.output(lights, GPIO.LOW)
     '''
     num_iters = 100
-    iter_times = []
+    #iter_times = []
     #f = open('/home/pyronia/libpyronia/apps/alexa/alexa.log', 'a+')
 
-    #    for i in range(0, num_iters):
-    #start = time.clock()
-    while internet_on() == False:
-        print(".")
-        token = gettoken()
-    alexa()
-    #end = time.clock()
-    #iter_times.append(str(end-start))
+    for i in range(0, num_iters):
+        #start = time.clock()
+        while internet_on() == False:
+            print(".")
+            token = gettoken()
+        alexa()
+        #end = time.clock()
+        #iter_times.append(str(end-start))
         
-    #time.sleep(5)
+        time.sleep(10)
     '''
     f = open('/home/pyronia/libpyronia/apps/alexa/alexa.py.data', 'a+')
     f.write(' '.join(iter_times))

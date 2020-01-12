@@ -72,7 +72,7 @@ static void avl_set_space(avl_node_t *n) {
     if (n == NULL || n->memdom_metadata == NULL)
         return;
 
-    n->memdom_metadata->nested_grants = 1;
+    //n->memdom_metadata->nested_grants = 1;
     n->memdom_metadata->has_space = true;
     avl_set_space(n->left);
     avl_set_space(n->right);
@@ -158,7 +158,7 @@ int pyr_init(const char *main_mod_path,
 #ifdef MEMDOM_BENCH
     record_internal_malloc(strlen(runtime->main_path)+1);
 #endif
-    runtime->nested_grants = 1; // this ensures the child starts from scatch
+    //runtime->nested_grants = 1; // this ensures the child starts from scatch
 
     if (!is_child) {
       /* Parse the library policy from disk */
@@ -273,7 +273,7 @@ static pyr_interp_dom_alloc_t *new_interp_dom_page() {
   new_dom->end = new_dom->start + MEMDOM_HEAP_SIZE;
   new_dom->has_space = true;
   new_dom->writable = true;
-  new_dom->nested_grants = 1;
+  //new_dom->nested_grants = 1;
 
   // for big profiles, we're going to be calling this functions before
   // we even launch the SI thread
@@ -447,8 +447,8 @@ static void avl_set_writable(avl_node_t *n) {
         return;
 
     dalloc = n->memdom_metadata;
-    if (dalloc->has_space){
-      if (!dalloc->writable || dalloc->nested_grants == 0) {
+    if (dalloc->has_space) {
+      if (!dalloc->writable) {
 #ifdef PYRONIA_BENCH
         get_cpu_time(&start);
 #endif
@@ -460,8 +460,8 @@ static void avl_set_writable(avl_node_t *n) {
         dalloc->writable = true;
 	rlog("[%s] added privs memdom %d\n", __func__, dalloc->memdom_id);
       }
-      dalloc->nested_grants++;
-      rlog("[%s] memdom %d, %d\n", __func__, dalloc->memdom_id, dalloc->nested_grants);
+      //dalloc->nested_grants++;
+      //rlog("[%s] memdom %d, %d\n", __func__, dalloc->memdom_id, dalloc->nested_grants);
     }
     avl_set_writable(n->left);
     avl_set_writable(n->right);
@@ -478,8 +478,8 @@ static void avl_set_readonly(avl_node_t *n) {
 
     dalloc = n->memdom_metadata;
     if (dalloc->writable) {
-      dalloc->nested_grants--;
-      if (dalloc->nested_grants == 0) {
+      //dalloc->nested_grants--;
+      //if (dalloc->nested_grants == 0) {
 #ifdef PYRONIA_BENCH
         get_cpu_time(&start);
 #endif
@@ -489,8 +489,8 @@ static void avl_set_readonly(avl_node_t *n) {
         record_priv_del(start, stop);
 #endif
         dalloc->writable = false;
-	rlog("[%s] removed privs memdom %d\n", __func__, dalloc->memdom_id);
-      }
+	//rlog("[%s] removed privs memdom %d\n", __func__, dalloc->memdom_id);
+	//}
       rlog("[%s] memdom %d\n", __func__, dalloc->memdom_id);
     }
     avl_set_readonly(n->left);
@@ -532,8 +532,7 @@ void pyr_grant_critical_state_write(void *op) {
     // if the caller has given us an existing secure object to
     // modify, we should just go ahead an grant that particular
     // memdom the write access
-    if (op) {
-      if (!dalloc->writable) {
+    if (op && !dalloc->writable) {
 #ifdef PYRONIA_BENCH
         get_cpu_time(&priv_start);
 #endif
@@ -544,17 +543,22 @@ void pyr_grant_critical_state_write(void *op) {
 #endif
 	dalloc->writable = true;
 	rlog("[%s] added privs obj %p in memdom %d\n", __func__, op, dalloc->memdom_id);
-      }
-      rlog("[%s] obj %p in memdom %d: %d %d\n", __func__, op, dalloc->memdom_id, dalloc->nested_grants, dalloc->writable);
-      dalloc->nested_grants++;
+	//}
+	//rlog("[%s] obj %p in memdom %d: %d %d\n", __func__, op, dalloc->memdom_id, dalloc->nested_grants, dalloc->writable);
+	//dalloc->nested_grants++;
       goto granted;
     }
 
+    rlog("[%s] Grants: %d\n", __func__, runtime->nested_grants);
+    
     // slight optimization: if we've already granted access
     // let's avoid another downcall to change the memdom privileges
     // and simply keep track of how many times we've granted access
-    avl_set_writable(runtime->interp_doms);
+    if (runtime->nested_grants == 0) {
+      avl_set_writable(runtime->interp_doms);
+    }
  granted:
+    runtime->nested_grants++;
     pthread_mutex_unlock(&security_ctx_mutex);
  out:
 #ifdef PYRONIA_BENCH
@@ -595,10 +599,11 @@ void pyr_revoke_critical_state_write(void *op) {
     }
 
     pthread_mutex_lock(&security_ctx_mutex);
+    runtime->nested_grants--;
     rlog("[%s] Number of grants: %d\n", __func__, runtime->nested_grants);
-    if (op) {
-      dalloc->nested_grants--;
-      if (dalloc->nested_grants == 0) {
+    if (op && runtime->nested_grants == 0) {
+      //dalloc->nested_grants--;
+      //if (dalloc->nested_grants == 0) {
 #ifdef PYRONIA_BENCH
         get_cpu_time(&priv_start);
 #endif
@@ -609,14 +614,16 @@ void pyr_revoke_critical_state_write(void *op) {
 #endif
 	dalloc->writable = false;
 	rlog("[%s] obj %p in domain %d\n", __func__, op, dalloc->memdom_id);
-      }
+	//}
       goto revoked;
     }
     //runtime->nested_grants--;
-    rlog("[%s] runtime-grants: %d\n", __func__, runtime->nested_grants);
+    //rlog("[%s] runtime-grants: %d\n", __func__, runtime->nested_grants);
     
     // same optimization as above
-    avl_set_readonly(runtime->interp_doms);
+    if (runtime->nested_grants == 0) {
+      avl_set_readonly(runtime->interp_doms);
+    }
  revoked:
     pthread_mutex_unlock(&security_ctx_mutex);
  out:

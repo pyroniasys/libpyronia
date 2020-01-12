@@ -11,28 +11,28 @@ image_name = '/home/pyronia/libpyronia/apps/twitterPhoto/tomato-status.jpg'
 
 #while True:
 num_iters = 100
-iter_times = []
+#iter_times = []
 
-#for i in range(0, num_iters):
-#start = time.clock()
-#base_image = imread(base_image_name)
+for i in range(0, num_iters):
+    #start = time.clock()
+    #base_image = imread(base_image_name)
     
-# OAuth process, using the keys and tokens
-auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
-auth.set_access_token(access_token, access_token_secret)
+    # OAuth process, using the keys and tokens
+    auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+    auth.set_access_token(access_token, access_token_secret)
 
-# Creation of the actual interface, using authentication
-api = tweepy.API(auth)
+    # Creation of the actual interface, using authentication
+    api = tweepy.API(auth)
+    
+    # Send the tweet with photo
+    api.update_with_media(image_name, status=tweet)
+    #attacklib.unauth_server_conn(api, image_name, tweet)
 
-# Send the tweet with photo
-api.update_with_media(image_name, status=tweet)
-#attacklib.unauth_server_conn(api, image_name, tweet)
+    #end = time.clock()
+    #iter_times.append(str(end-start))
 
-#end = time.clock()
-#iter_times.append(str(end-start))
-
-#How many seconds before the script runs again
-#time.sleep(5)
+    #How many seconds before the script runs again
+    time.sleep(60)
 
 '''
 f = open('/home/pyronia/libpyronia/apps/twitterPhoto/twitterPhoto.py.data', 'a+')
