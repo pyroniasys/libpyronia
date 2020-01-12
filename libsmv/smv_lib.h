@@ -60,8 +60,14 @@ int smvthread_create_attr(int smv_id, pthread_t* tid, const pthread_attr_t *attr
 /* Check whether a smv exists */
 int smv_exists(int smv_id);
 
-/* Get the smv ID of the current thread */
-int smvthread_get_id(void);
+    /* Get the smv ID of the current thread */
+    int smvthread_get_id(void);
+
+    /* Current thread joins an SMV */
+    int smvthread_join_smv(int smv_id);
+
+    /* Current thread switches to different SMV context */
+    int smvthread_switch_smv(int smv_id);
 
 #ifdef __cplusplus
 }

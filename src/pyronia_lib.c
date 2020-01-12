@@ -34,7 +34,6 @@ static int in_init = 1;
 #endif
 
 static struct pyr_security_context *runtime = NULL;
-static int pyr_smv_id = -1;
 static int si_smv_id = -1;
 static int is_build = 0;
 static pthread_t recv_th;
@@ -57,6 +56,8 @@ static inline int init_child_memdoms() {
 	continue;
       smv_join_domain(err, MAIN_THREAD);
       memdom_priv_add(err, MAIN_THREAD, MEMDOM_READ);
+      smv_join_domain(err, runtime->trusted_interp_context_id);
+      memdom_priv_add(err, runtime->trusted_interp_context_id, MEMDOM_READ | MEMDOM_WRITE);
       smv_join_domain(err, si_smv_id);
       memdom_priv_add(err, si_smv_id, MEMDOM_READ | MEMDOM_WRITE);
     }
@@ -228,7 +229,7 @@ int pyr_init(const char *main_mod_path,
     return err;
 }
 
-static pyr_interp_dom_alloc_t *new_interp_memdom() {
+static pyr_interp_dom_alloc_t *new_interp_dom_page() {
   int interp_memdom = -1;
   pyr_interp_dom_alloc_t *new_dom = NULL;
 
@@ -257,7 +258,10 @@ static pyr_interp_dom_alloc_t *new_interp_memdom() {
 #endif
   // don't forget to add the main thread to this memdom
   smv_join_domain(interp_memdom, MAIN_THREAD);
-  memdom_priv_add(interp_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
+  memdom_priv_add(interp_memdom, MAIN_THREAD, MEMDOM_READ);
+  // don't forget to add the main thread to this memdom
+  smv_join_domain(interp_memdom, runtime->trusted_interp_context_id);
+  memdom_priv_add(interp_memdom, runtime->trusted_interp_context_id, MEMDOM_READ | MEMDOM_WRITE);
 
   new_dom->memdom_id = interp_memdom;
   new_dom->start = memdom_mmap(new_dom->memdom_id, 0, MEMDOM_HEAP_SIZE,
@@ -343,7 +347,7 @@ void *pyr_alloc_critical_runtime_state(size_t size) {
 
     // if we get here, no memdoms have space for the current allocation
     rlog("[%s] Not enough space in any active memdoms. Current number of active memdoms: %d\n", __func__, interp_memdom_pool_size);
-    dalloc = new_interp_memdom();
+    dalloc = new_interp_dom_page();
     if (!dalloc)
         goto out;
     new_block = memdom_alloc(dalloc->memdom_id, size);
@@ -620,6 +624,30 @@ void pyr_revoke_critical_state_write(void *op) {
     get_cpu_time(&stop);
     record_revoke(start, stop);
 #endif
+    return;
+}
+
+void pyr_enter_trusted_interpreter_context(void) {
+    // let's skip context switching if our runtime
+    // doesn't have a trusted context
+    if (!runtime || runtime->trusted_interp_context_id == -1) {
+        goto out;
+    }
+
+    smvthread_switch_smv(runtime->trusted_interp_context_id);
+ out:
+    return;
+}
+
+void pyr_exit_trusted_interpreter_context(void) {
+    // let's skip context switching if our runtime
+    // doesn't have a trusted context
+    if (!runtime || runtime->trusted_interp_context_id == -1) {
+        goto out;
+    }
+
+    smvthread_switch_smv(MAIN_THREAD);
+ out:
     return;
 }
 

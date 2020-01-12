@@ -109,7 +109,7 @@ int smv_kill(int smv_id) {
 int smv_join_domain(int memdom_id, int smv_id) {
   int rv = 0;
   char buf[50];
-  sprintf(buf, "smv,domain,%d,join,%d", smv_id, memdom_id);
+  sprintf(buf, "smv,domainjoin,%d,%d", smv_id, memdom_id);
   rv = message_to_kernel(buf);
   if (rv == -1) {
     fprintf(stderr, "smv_join_domain(smv %d, memdom %d) failed\n", smv_id, memdom_id);
@@ -123,7 +123,7 @@ int smv_join_domain(int memdom_id, int smv_id) {
 int smv_leave_domain(int memdom_id, int smv_id) {
   int rv = 0;
   char buf[100];
-  sprintf(buf, "smv,domain,%d,leave,%d", smv_id, memdom_id);
+  sprintf(buf, "smv,domainleave,%d,%d", smv_id, memdom_id);
   rv = message_to_kernel(buf);
   if (rv == -1) {
     fprintf(stderr, "smv_leave_domain(smv %d, memdom %d) failed\n", smv_id, memdom_id);
@@ -137,7 +137,7 @@ int smv_leave_domain(int memdom_id, int smv_id) {
 int smv_is_in_domain(int memdom_id, int smv_id) {
   int rv = 0;
   char buf[50];
-  sprintf(buf, "smv,domain,%d,isin,%d", smv_id, memdom_id);
+  sprintf(buf, "smv,domainisin,%d,%d", smv_id, memdom_id);
   rv = message_to_kernel(buf);
   if (rv == -1) {
     fprintf(stderr, "smv_is_in_domain(smv %d, memdom %d) failed\n", smv_id, memdom_id);
@@ -297,7 +297,7 @@ int smvthread_create(int smv_id, pthread_t* tid, void*(fn)(void*), void* args) {
 int smvthread_get_id() {
   int rv = 0;
   char buf[50];
-  sprintf(buf, "smv,getsmvid");
+  sprintf(buf, "smv,thgetsmv");
   rv = message_to_kernel(buf);
   if (rv == -1) {
     fprintf(stderr, "smvthread_get_id() failed\n");
@@ -306,4 +306,34 @@ int smvthread_get_id() {
 
   rlog("[%s] current smv ID: %d\n", __func__, rv);
   return rv;
+}
+
+/* Current thread joins an SMV */
+int smvthread_join_smv(int smv_id) {
+    int rv = 0;
+    char buf[50];
+    sprintf(buf, "smv,thjoinsmv,%d", smv_id);
+    rv = message_to_kernel(buf);
+    if (rv == -1) {
+        fprintf(stderr, "smvthread_join_smv(smv %d) failed\n", smv_id);
+        return -1;
+    }
+    
+    rlog("[%s] current thread smv ID %d joined smv %d\n", __func__, smvthread_get_id(), smv_id);
+    return rv;
+}
+
+/* Current thread switches to different SMV context */
+int smvthread_switch_smv(int smv_id) {
+    int rv = 0;
+    char buf[50];
+    sprintf(buf, "smv,thswitchsmv,%d", smv_id);
+    rv = message_to_kernel(buf);
+    if (rv == -1) {
+        fprintf(stderr, "smvthread_switch_smv(smv %d) failed\n", smv_id);
+        return -1;
+    }
+    
+    rlog("[%s] current smv ID is now %d\n", __func__, smvthread_get_id());
+    return rv;
 }

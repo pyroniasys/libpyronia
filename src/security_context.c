@@ -55,8 +55,23 @@ int pyr_security_context_alloc(struct pyr_security_context **ctxp,
 	printf("[%s] main thread %d not in first interp memdom!!!\n", __func__, smvthread_get_id());
 	goto fail;
       }
+
+      // create a separate exec context in which we have RW privs to the
+      // interp domain
+      c->trusted_interp_context_id = -1;
+      if ((c->trusted_interp_context_id = smv_create()) == -1) {
+          printf("[%s] Failed to create trusted interpreter context\n", __func__);
+          goto fail;
+      }
+      if (smvthread_join_smv(c->trusted_interp_context_id) == -1) {
+          printf("[%s] Failed to join trusted interpreter context\n", __func__);
+          goto fail;
+      }
+      smv_join_domain(interp_memdom, c->trusted_interp_context_id);
       
-      memdom_priv_add(interp_memdom, MAIN_THREAD, MEMDOM_READ | MEMDOM_WRITE);
+      memdom_priv_add(interp_memdom, MAIN_THREAD, MEMDOM_READ);
+      memdom_priv_add(interp_memdom, c->trusted_interp_context_id,
+                      MEMDOM_READ | MEMDOM_WRITE);
 
       interp_dom_meta->memdom_id = interp_memdom;
       interp_dom_meta->start = memdom_mmap(interp_dom_meta->memdom_id, 0, MEMDOM_HEAP_SIZE,
@@ -157,6 +172,7 @@ void pyr_security_context_free(struct pyr_security_context **ctxp) {
 #ifdef MEMDOM_BENCH
     record_internal_free(sizeof(struct pyr_security_context));
 #endif
+    smv_kill(c->trusted_interp_context_id);
     free(c);
     rlog("[%s] Called from PID %d: %p\n", __func__, getpid(), c);
     *ctxp = NULL;

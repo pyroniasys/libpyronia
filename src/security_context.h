@@ -41,6 +41,7 @@ struct pyr_security_context {
     char *main_path;
     pyr_native_ctx_t *native_libs;
     avl_node_t *interp_doms;
+    int trusted_interp_context_id; // privileged interpreter context
     /* The runtime may grant write access to the critical state
      * in a function that calls another function that grants access
      * itself. To make sure we don't revoke access to the outer

@@ -32,6 +32,8 @@ extern "C" {
     int pyr_is_critical_state(void *op);
     void pyr_grant_critical_state_write(void *op);
     void pyr_revoke_critical_state_write(void *op);
+    void pyr_enter_trusted_interpreter_context(void);
+    void pyr_exit_trusted_interpreter_context(void);
     int pyr_free_critical_state(void *op);
     int pyr_serialize_callstack(const char *func_fqn);
     int pyr_thread_create(pthread_t* tid, const pthread_attr_t *attr,
