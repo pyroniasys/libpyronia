@@ -1,0 +1,3 @@
+[submodule "smv"]
+	path = smv
+	url = git@github.com:masomel/smv.git
